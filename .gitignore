@@ -29,6 +29,17 @@ wheels/
 *.egg
 MANIFEST
 
+# --- PyInstaller ----------------------------------------------------------
+# Build output and the intermediate work directory. Never commit a bundle:
+# it is a 300 MB platform-specific artefact and goes stale instantly.
+build/
+dist/
+*.manifest
+*.spec.bak
+# Keep the two specs themselves — they are source.
+!bunney_pos.spec
+!windows_build.spec
+
 # --- Virtual environments -------------------------------------------------
 .venv/
 venv/

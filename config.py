@@ -36,30 +36,49 @@ PHASE = 5  # final phase — see README/plan
 # --------------------------------------------------------------------------- #
 # Paths
 # --------------------------------------------------------------------------- #
-# BASE_DIR works both when running from source and when frozen (PyInstaller).
-if getattr(sys, "frozen", False):  # pragma: no cover - frozen builds
+# Two different locations matter in a frozen (PyInstaller) build, and confusing
+# them is the classic way to ship a bundle that crashes on launch:
+#
+#   BUNDLE_DIR  — where the *bundled read-only* files were extracted. For a
+#                 onefile build this is a temporary directory that PyInstaller
+#                 deletes when the app exits, so nothing writable may live here.
+#   BASE_DIR    — the folder holding the executable. This is what the user sees
+#                 and is stable across runs, so the database, backups and logs
+#                 go here and survive upgrades.
+if getattr(sys, "frozen", False):
+    BUNDLE_DIR = Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
     BASE_DIR = Path(sys.executable).resolve().parent
 else:
-    BASE_DIR = Path(__file__).resolve().parent
+    BUNDLE_DIR = Path(__file__).resolve().parent
+    BASE_DIR = BUNDLE_DIR
 
-ASSETS_DIR = BASE_DIR / "assets"
+# Read-only resources that ship inside the bundle.
+ASSETS_DIR = BUNDLE_DIR / "assets"
 STYLES_DIR = ASSETS_DIR / "styles"
 ICONS_DIR = ASSETS_DIR / "icons"
-LOGO_PATH = Path(os.environ.get("BUNNEY_LOGO", ICONS_DIR / "logo.svg"))
+SCHEMA_PATH = BUNDLE_DIR / "database" / "schema.sql"
 
-# Primary SQLite database lives inside the app folder (per architecture spec).
-DB_DIR = ASSETS_DIR / "database"
-DB_PATH = Path(os.environ.get("CAFE_POS_DB", DB_DIR / "cafe_pos.db"))
-SCHEMA_PATH = BASE_DIR / "database" / "schema.sql"
+# The logo is needed as a real file for QIcon, so prefer an on-disk copy next to
+# the executable (the user can drop in their own) and fall back to the bundled one.
+def _resolve_logo() -> Path:
+    override = os.environ.get("BUNNEY_LOGO")
+    if override:
+        return Path(override)
+    beside_exe = BASE_DIR / "assets" / "icons" / "logo.svg"
+    if beside_exe.exists():
+        return beside_exe
+    return ICONS_DIR / "logo.svg"
 
-# Secondary (safety) backup folder inside the application folder. Used whenever
-# the configured external drive is unplugged.
-LOCAL_BACKUP_DIR = BASE_DIR / "backups" / "local"
-LOG_DIR = BASE_DIR / "logs"
-LOG_PATH = LOG_DIR / "cafe_pos.log"
 
-# Receipts written when no thermal printer is reachable (the graceful fallback):
-# a plain-text copy plus a PNG of exactly what would have been printed.
+LOGO_PATH = _resolve_logo()
+
+# Writable state, kept beside the executable.
+APP_DATA_DIR = Path(os.environ.get("BUNNEY_DATA_DIR", BASE_DIR))
+DB_DIR = APP_DATA_DIR / "assets" / "database"
+DB_PATH = Path(os.environ.get("BUNNEY_DB", DB_DIR / "bunney_pos.db"))
+LOCAL_BACKUP_DIR = APP_DATA_DIR / "backups" / "local"
+LOG_DIR = APP_DATA_DIR / "logs"
+LOG_PATH = LOG_DIR / "bunney_pos.log"
 RECEIPTS_DIR = LOG_DIR / "receipts"
 
 # Default external backup target. Admin overrides this in Settings and the
