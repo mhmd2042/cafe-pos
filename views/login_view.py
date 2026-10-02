@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import logging
 
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QKeyEvent
 from PyQt6.QtWidgets import (
     QDialog,
@@ -158,17 +158,29 @@ class Toast(QFrame):
 # PIN pad
 # --------------------------------------------------------------------------- #
 class PinPad(QWidget):
-    """3x4 numeric keypad emitting digit / backspace / submit signals."""
+    """
+    3x4 numeric keypad emitting digit / backspace / submit signals.
+
+    Height is deliberately locked to what four rows of touch-sized keys actually
+    need. Without that, Qt treats this as the one stretchable child of the login
+    panel and shrinks it whenever the window is shorter than the panel's
+    minimum — which silently collapses the rows onto each other and paints the
+    middle digits out of existence. A keypad that overlaps itself is unusable,
+    so it refuses to compress and lets the surrounding layout scroll instead.
+    """
 
     digit_pressed = pyqtSignal(str)
     backspace_pressed = pyqtSignal()
     submitted = pyqtSignal()
 
+    ROWS = 4
+    COLUMNS = 3
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         # Digits are read left-to-right even in an Arabic UI (as on every phone
         # dialer), so this pad opts out of the app-wide RTL mirroring. Without
-        # this the grid renders 3-2-1 and puts ✓ on the far left.
+        # this the grid renders 3-2-1 and puts the confirm key on the far left.
         self.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
         grid = QGridLayout(self)
         grid.setSpacing(14)
@@ -207,10 +219,47 @@ class PinPad(QWidget):
         submit.setToolTip("تأكيد الرمز")
         grid.addWidget(submit, 3, 2)
 
-        for col in range(3):
+        for col in range(self.COLUMNS):
             grid.setColumnStretch(col, 1)
-        for row in range(4):
+        for row in range(self.ROWS):
             grid.setRowStretch(row, 1)
+
+        # Every key gets an explicit floor so the grid can never be squeezed to
+        # something untappable.
+        for button in self.findChildren(QPushButton):
+            button.setMinimumSize(config.MIN_TOUCH_TARGET, config.MIN_TOUCH_TARGET)
+
+        self._lock_height()
+
+    def _lock_height(self) -> None:
+        """
+        Pin the pad to exactly the height its keys need.
+
+        The number comes from the buttons' own minimumSizeHint rather than from
+        MIN_TOUCH_TARGET: the stylesheet's min-height (84px) plus border and font
+        metrics makes a key 110px tall in practice, and sizing the container off
+        the 60px constant would leave the rows overlapping by 50px.
+        """
+        height = self.required_height()
+        self.setMinimumHeight(height)
+        self.setMaximumHeight(height)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+    def required_height(self) -> int:
+        """Height four rows of keys need, including the gaps between them."""
+        buttons = self.findChildren(QPushButton)
+        spacing = self.layout().spacing() if self.layout() else 14
+        if buttons:
+            key_height = max(b.minimumSizeHint().height() for b in buttons)
+        else:  # pragma: no cover - only before the grid is built
+            key_height = config.MIN_TOUCH_TARGET
+        return self.ROWS * key_height + (self.ROWS - 1) * spacing
+
+    def sizeHint(self) -> QSize:  # noqa: N802 - Qt naming
+        return QSize(430, self.required_height())
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802 - Qt naming
+        return QSize(300, self.required_height())
 
 
 # --------------------------------------------------------------------------- #
@@ -289,7 +338,6 @@ class LoginView(QWidget):
         layout.addWidget(self.cafe_name_label)
         layout.addWidget(self.clock_label)
         layout.addWidget(self.shift_label)
-        layout.addStretch(1)
 
         hint = QLabel(
             "اختر المستخدم ثم أدخل الرمز السري.\n"
@@ -299,13 +347,43 @@ class LoginView(QWidget):
         )
         hint.setObjectName("HintText")
         hint.setWordWrap(True)
-        layout.addWidget(hint)
 
         version = QLabel(
             f"الإصدار {self._ltr(config.VERSION)} — إصدار نهائي"
         )
         version.setObjectName("HintText")
-        layout.addWidget(version)
+
+        # This panel is the flexible half of the login screen: when the window is
+        # short (a 768px laptop), it absorbs the shortfall by scrolling its own
+        # reference text instead of squeezing the keypad. Keeping the keypad
+        # fixed is the whole point — a half-visible number pad cannot be used to
+        # log in.
+        self.brand_scroll = QScrollArea()
+        self.brand_scroll.setObjectName("BrandScroll")
+        self.brand_scroll.setWidgetResizable(True)
+        self.brand_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.brand_scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self.brand_scroll.setMinimumHeight(200)
+
+        body = QWidget()
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(0, 0, 0, 0)
+        body_layout.setSpacing(18)
+        body_layout.addWidget(title)
+        body_layout.addWidget(subtitle)
+        body_layout.addSpacing(6)
+        body_layout.addWidget(self._divider())
+        body_layout.addWidget(self.cafe_name_label)
+        body_layout.addWidget(self.clock_label)
+        body_layout.addWidget(self.shift_label)
+        body_layout.addStretch(1)
+        body_layout.addWidget(hint)
+        body_layout.addWidget(version)
+        self.brand_scroll.setWidget(body)
+
+        layout.addWidget(self.brand_scroll, 1)
         return panel
 
     def _build_keypad_panel(self) -> QWidget:
@@ -320,8 +398,11 @@ class LoginView(QWidget):
 
         self.user_scroll = QScrollArea()
         self.user_scroll.setWidgetResizable(True)
-        self.user_scroll.setMinimumHeight(150)
+        self.user_scroll.setMinimumHeight(120)
         self.user_scroll.setMaximumHeight(230)
+        self.user_scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
         self.user_container = QWidget()
         self.user_layout = QVBoxLayout(self.user_container)
         self.user_layout.setContentsMargins(0, 0, 0, 0)
@@ -335,21 +416,50 @@ class LoginView(QWidget):
 
         self.dots = PinDots(config.PIN_LENGTH)
 
-        self.toast = Toast()
+        # The toast floats above the panel as an overlay rather than sitting in
+        # the layout. In the flow it claimed its full wrapped height even while
+        # hidden (480px in practice), which alone was enough to push the panel
+        # past the window and clip the keypad.
+        self.toast = Toast(panel)
+        self.toast.hide()
 
         self.pad = PinPad()
 
         layout.addWidget(self.user_section_title)
-        layout.addWidget(self.user_scroll)
+        layout.addWidget(self.user_scroll, 1)   # the user list takes the slack
         layout.addWidget(self.selected_label)
         layout.addWidget(self.dots)
-        layout.addWidget(self.toast)
-        layout.addWidget(self.pad, 1)
+        # No stretch factor: the pad owns its height and must not be squeezed.
+        layout.addWidget(self.pad)
 
         self.manager_button = QPushButton("دخول المدير")
         self.manager_button.setObjectName("GhostAction")
         layout.addWidget(self.manager_button)
-        return panel
+
+        # Wrap the whole panel so that on a short screen it scrolls rather than
+        # compressing anything to an unusable size. The spec asks for a 720px
+        # minimum window, and a 768px laptop panel cannot fit everything at full
+        # size — scrolling is the honest answer.
+        scroller = QScrollArea()
+        scroller.setObjectName("LoginScroll")
+        scroller.setWidgetResizable(True)
+        scroller.setFrameShape(QFrame.Shape.NoFrame)
+        scroller.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroller.setWidget(panel)
+        return scroller
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        """Keep the floating toast pinned across the bottom of the panel."""
+        super().resizeEvent(event)
+        if hasattr(self, "toast") and self.toast.parent() is not None:
+            parent = self.toast.parentWidget()
+            margin = 16
+            height = max(self.toast.sizeHint().height(), 44)
+            self.toast.setGeometry(
+                margin, parent.height() - height - margin,
+                max(parent.width() - 2 * margin, 100), height,
+            )
+            self.toast.raise_()
 
     @staticmethod
     def _divider() -> QFrame:
@@ -372,10 +482,7 @@ class LoginView(QWidget):
         self._tick()
 
     def _tick(self) -> None:
-        from datetime import datetime
-
-        now = datetime.now()
-        self.clock_label.setText(now.strftime("%A، %d %B %Y — %H:%M"))
+        self.clock_label.setText(config.format_datetime_ar())
         try:
             self.cafe_name_label.setText(
                 self.auth.repo.db.get_setting("cafe_name", config.APP_NAME_AR)

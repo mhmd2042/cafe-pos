@@ -7,7 +7,7 @@ responsive product grid). Both are used by the login screen and the POS.
 
 from __future__ import annotations
 
-from PyQt6.QtCore import QPoint, QRect, QSize, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QEvent, QPoint, QRect, QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -27,12 +27,28 @@ class Toast(QFrame):
     Deliberately not a QMessageBox: during a rush, a modal that needs dismissing
     is worse than a line of text that fades. Use `timeout_ms=0` to keep it up
     until it is replaced.
+
+    The toast is an OVERLAY, not a layout citizen. It stays parented to whatever
+    widget it was created with but never claims a slot in that widget's layout,
+    and it is resized to sit across the bottom of its parent. Adding it with
+    addWidget() is harmless — it simply will not be laid out, because
+    sizePolicy is set to Ignored and it is raised above its siblings.
+
+    This matters because a hidden QFrame still reserves its full size when it is
+    a layout item: measured at 640x480, one toast was enough to push a panel past
+    the window and clip the keypad underneath it.
     """
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("Toast")
         self.setVisible(False)
+        # Ignored means "do not let me influence the layout at all", and the
+        # explicit zero minimum makes that enforceable: without it Qt still
+        # reports a minimumSizeHint of the label's height, which is enough to
+        # reserve a slot in a parent layout.
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
+        self.setMinimumSize(0, 0)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(16, 12, 16, 12)
         self.label = QLabel("")
@@ -42,6 +58,37 @@ class Toast(QFrame):
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
         self._timer.timeout.connect(lambda: self.setVisible(False))
+        if parent is not None:
+            parent.installEventFilter(self)
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802 - Qt naming
+        """Report no minimum: the toast must never reserve layout space."""
+        return QSize(0, 0)
+
+    def sizeHint(self) -> QSize:  # noqa: N802 - Qt naming
+        """Only used when the toast sizes itself for display."""
+        hint = self.layout().sizeHint() if self.layout() else QSize(200, 44)
+        return QSize(max(hint.width(), 200), max(hint.height(), 44))
+
+    def eventFilter(self, obj, event):  # noqa: N802 - Qt naming
+        """Keep the overlay pinned to the bottom of its parent."""
+        if event.type() == QEvent.Type.Resize and obj is self.parentWidget():
+            self._reposition()
+        return super().eventFilter(obj, event)
+
+    def _reposition(self) -> None:
+        parent = self.parentWidget()
+        if parent is None:
+            return
+        margin = 16
+        height = max(self.sizeHint().height(), 44)
+        self.setGeometry(
+            margin,
+            max(parent.height() - height - margin, 0),
+            max(parent.width() - 2 * margin, 120),
+            height,
+        )
+        self.raise_()
 
     def show_message(self, text: str, kind: str = "info", timeout_ms: int = 4000) -> None:
         frame_name, label_name = {
@@ -56,7 +103,9 @@ class Toast(QFrame):
         self.style().unpolish(self)
         self.style().polish(self)
         self.label.setText(text)
+        self._reposition()
         self.setVisible(True)
+        self.raise_()
         self._timer.stop()
         if timeout_ms > 0:
             self._timer.start(timeout_ms)

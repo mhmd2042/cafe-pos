@@ -435,6 +435,41 @@ def secure_sqlite_sidecars(db_path) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Arabic date/time formatting
+# --------------------------------------------------------------------------- #
+# strftime("%A، %d %B") follows the OS locale, so the login clock read
+# "Friday, 02 October 2026" on an English Windows install — English text in the
+# middle of an Arabic interface. These tables make the output Arabic regardless
+# of how the machine is configured, which is what a café in Yemen expects.
+WEEKDAYS_AR = ("الاثنين", "الثلاثاء", "الأربعاء", "الخميس",
+               "الجمعة", "السبت", "الأحد")          # Monday-first, as datetime
+MONTHS_AR = ("يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
+             "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر")
+
+
+def format_datetime_ar(when=None, *, with_time: bool = True) -> str:
+    """
+    Format a datetime in Arabic, independent of the system locale.
+
+    Output shape: 'الجمعة، 02 أكتوبر 2026 — 15:26'
+    """
+    from datetime import datetime as _datetime
+
+    moment = when or _datetime.now()
+    day_name = WEEKDAYS_AR[moment.weekday()]
+    month_name = MONTHS_AR[moment.month - 1]
+    text = f"{day_name}، {moment.day:02d} {month_name} {moment.year}"
+    if with_time:
+        text += f" — {moment.hour:02d}:{moment.minute:02d}"
+    return text
+
+
+def format_date_ar(when=None) -> str:
+    """Arabic date without the time: '02 أكتوبر 2026'."""
+    return format_datetime_ar(when, with_time=False).split("، ", 1)[-1]
+
+
+# --------------------------------------------------------------------------- #
 # Platform integration
 # --------------------------------------------------------------------------- #
 # Everything that behaves differently on Windows lives here, so no view or
