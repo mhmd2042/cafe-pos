@@ -181,17 +181,16 @@ rm -f "$OUT"
 #   gzip   162s -> 68 MB      (dpkg-deb -Zgzip)
 #   xz     396s -> 53 MB      (dpkg-deb default, multi-threaded)
 #
-# xz gives a 22% smaller download but takes 2.4x as long to build. gzip is the
-# default here because it keeps the rebuild loop short, which matters while the
-# app is still changing. For a release you intend to hand to cafes on slow
-# connections, the smaller file is probably worth the wait:
+# xz is the default: a 22% smaller download matters more to the cafe installing
+# the release over a slow connection than the extra build time costs a
+# developer. For a fast local rebuild loop, override it:
 #
-#   DEB_COMPRESS=xz ./packaging/build-deb.sh
+#   DEB_COMPRESS=gzip ./packaging/build-deb.sh
 #
 # Note that xz runs multi-threaded and its parent process sits at 0% CPU while
 # it waits on the compressor child, so it looks stalled if you only watch the
-# top-level process. It is not.
-DEB_COMPRESS="${DEB_COMPRESS:-gzip}"
+# top-level process. It is not — expect roughly six to seven minutes.
+DEB_COMPRESS="${DEB_COMPRESS:-xz}"
 
 dpkg-deb "-Z${DEB_COMPRESS}" --build --root-owner-group "$STAGE" "$OUT" >/dev/null
 
