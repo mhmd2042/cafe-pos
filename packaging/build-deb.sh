@@ -176,11 +176,21 @@ rm -f "$OUT"
 ( cd "$STAGE" && find . -path ./DEBIAN -prune -o -type f -print0 \
     | xargs -0 md5sum > DEBIAN/md5sums ) 2>/dev/null || true
 
-# Compression level matters more than it looks. dpkg-deb defaults to multi
-# threaded xz, which takes over ten minutes on ~190 MB of Qt libraries; gzip
-# finishes the same tree in under three and produces a comparably sized package
-# (~68 MB vs ~69 MB). For a release that gets rebuilt often, that is the right
-# trade. Override with DEB_COMPRESS=... if you want maximum compression.
+# Compression level is a real trade-off, measured on this 185 MB staging tree:
+#
+#   gzip   162s -> 68 MB      (dpkg-deb -Zgzip)
+#   xz     396s -> 53 MB      (dpkg-deb default, multi-threaded)
+#
+# xz gives a 22% smaller download but takes 2.4x as long to build. gzip is the
+# default here because it keeps the rebuild loop short, which matters while the
+# app is still changing. For a release you intend to hand to cafes on slow
+# connections, the smaller file is probably worth the wait:
+#
+#   DEB_COMPRESS=xz ./packaging/build-deb.sh
+#
+# Note that xz runs multi-threaded and its parent process sits at 0% CPU while
+# it waits on the compressor child, so it looks stalled if you only watch the
+# top-level process. It is not.
 DEB_COMPRESS="${DEB_COMPRESS:-gzip}"
 
 dpkg-deb "-Z${DEB_COMPRESS}" --build --root-owner-group "$STAGE" "$OUT" >/dev/null
