@@ -1,0 +1,2 @@
+Kept in version control so the application finds the backup folder on a fresh
+clone. The contents are ignored — see .gitignore.

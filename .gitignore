@@ -1,0 +1,90 @@
+# ---------------------------------------------------------------------------
+# Café POS — .gitignore
+#
+# The rule of thumb here: NEVER commit a real café's data. The database, its
+# backups, the receipts and the logs all contain sales history, revenue figures
+# and PBKDF2 PIN hashes. Only source code, styles, tests and the schema belong
+# in the repository.
+# ---------------------------------------------------------------------------
+
+# --- Python ---------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# --- Virtual environments -------------------------------------------------
+.venv/
+venv/
+ENV/
+env/
+.python-version
+
+# --- Test / coverage / type-checker caches --------------------------------
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# --- Application data: databases ------------------------------------------
+# The live SQLite database and its WAL/SHM sidecars.
+assets/database/*.db
+assets/database/*.db-wal
+assets/database/*.db-shm
+assets/database/*.db-journal
+# Any stray database created by tests or by a --db override.
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# --- Application data: backups --------------------------------------------
+# Local fallback backups and the Z-Reports mirrored beside them.
+backups/local/*.db
+backups/local/**/*.txt
+backups/local/**/*.csv
+# Keep the folder itself so the app finds it on a fresh clone.
+!backups/local/.gitkeep
+
+# --- Application data: logs, receipts, exported reports -------------------
+logs/
+*.log
+*.log.*
+
+# --- Local / machine-specific settings ------------------------------------
+.env
+.env.*
+*.local
+config_local.py
+
+# --- Editors and OS clutter ----------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
