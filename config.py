@@ -72,8 +72,43 @@ def _resolve_logo() -> Path:
 
 LOGO_PATH = _resolve_logo()
 
-# Writable state, kept beside the executable.
-APP_DATA_DIR = Path(os.environ.get("BUNNEY_DATA_DIR", BASE_DIR))
+# Writable state. The default is "beside the executable", which is what you want
+# for a portable copy on a USB stick. But an *installed* copy lives somewhere the
+# user cannot write (/opt for a .deb, C:\Program Files for an .exe, a read-only
+# squashfs mount for an AppImage), so fall back to a per-user directory in that
+# case. Detecting it here means every packaging format works without needing a
+# wrapper script to set environment variables.
+def _is_writable(directory: Path) -> bool:
+    probe = directory / ".bunney_write_test"
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+        probe.write_text("", encoding="utf-8")
+        probe.unlink(missing_ok=True)
+        return True
+    except OSError:
+        return False
+
+
+def _default_data_dir() -> Path:
+    override = os.environ.get("BUNNEY_DATA_DIR")
+    if override:
+        return Path(override).expanduser()
+
+    # Portable / development: keep everything next to the app.
+    if _is_writable(BASE_DIR):
+        return BASE_DIR
+
+    # Installed: use the platform's per-user data location.
+    if sys.platform.startswith("win"):
+        base = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA")
+        root = Path(base) if base else Path.home() / "AppData" / "Local"
+    else:
+        xdg = os.environ.get("XDG_DATA_HOME")
+        root = Path(xdg).expanduser() if xdg else Path.home() / ".local" / "share"
+    return root / "bunney-pos"
+
+
+APP_DATA_DIR = _default_data_dir()
 DB_DIR = APP_DATA_DIR / "assets" / "database"
 DB_PATH = Path(os.environ.get("BUNNEY_DB", DB_DIR / "bunney_pos.db"))
 LOCAL_BACKUP_DIR = APP_DATA_DIR / "backups" / "local"

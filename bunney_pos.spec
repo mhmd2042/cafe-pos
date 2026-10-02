@@ -7,28 +7,29 @@ application, its Qt runtime, the SQLite schema and the UI assets. The target
 machine needs no Python and no virtual environment.
 
 Build:
+    ./build-linux.sh
+    # or directly:
     .venv/bin/pyinstaller --clean --noconfirm bunney_pos.spec
 
-Design notes
-------------
-* The app writes its database, backups, receipts and logs *next to the
-  executable* (see config.BASE_DIR), not inside the bundle. A onefile build
-  extracts to a temp directory that PyInstaller deletes on exit, so writable
-  state must never live there. This spec therefore also works with
-  ONEFILE = True, but the default is a directory build: it starts faster and
-  the user can see and copy their own data folder.
-* The Qt platform plugins, image format plugins and TLS/codec bits are pulled
-  in by PyInstaller's PyQt6 hooks. Nothing is pruned here — a café till that
-  fails to open because a plugin was excluded is far worse than a 90 MB folder.
-* assets/ is bundled read-only. The stylesheets and the logo are read at
-  runtime through config.BUNDLE_DIR.
+Why this spec prunes Qt
+-----------------------
+PyInstaller's PyQt6 hook collects *every* Qt shared library that ships in the
+wheel — Quick, QML, WebEngine, Multimedia, 3D, Charts and friends. Listing them
+in `excludes` does nothing: that option filters Python imports, not the Qt
+binaries the hook copies.
+
+The app uses only QtCore, QtGui, QtWidgets and QtSvg, so the unused libraries
+are removed from the collected file list below. That takes the bundle from
+~330 MB to roughly a third of that, which also stops the .deb step from taking
+a quarter of an hour (compressing 330 MB of redundant Qt is slow).
+
+Anything pruned here would cause an ImportError at launch, so the list is
+deliberately conservative: only modules the app never touches are removed.
 """
 
 import sys
 from pathlib import Path
 
-# Build as a directory bundle by default. Set the environment variable to build
-# a single file instead (slower start, but one artefact to copy).
 ONEFILE = False
 
 block_cipher = None
@@ -37,21 +38,13 @@ block_cipher = None
 # Do not take .parent of it, or the datas paths resolve one level too high.
 PROJECT_ROOT = Path(SPECPATH).resolve()
 
-# --- what ships inside the bundle ----------------------------------------- #
+# --- bundled read-only resources ------------------------------------------- #
 datas = [
-    # SQLite schema + seed data. Read at first launch to create the database.
     (str(PROJECT_ROOT / "database" / "schema.sql"), "database"),
-    # Stylesheets (QSS) and icons, including logo.svg.
     (str(PROJECT_ROOT / "assets" / "styles"), "assets/styles"),
     (str(PROJECT_ROOT / "assets" / "icons"), "assets/icons"),
 ]
 
-# Qt ships its plugins as separate shared libraries; PyInstaller's PyQt6 hook
-# normally collects them, but being explicit avoids a class of "could not find
-# or load the Qt platform plugin" failures on machines with no Qt installed.
-from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs  # noqa: E402
-
-binaries = []
 hiddenimports = [
     "PyQt6.QtCore",
     "PyQt6.QtGui",
@@ -64,13 +57,69 @@ hiddenimports = [
     "decimal",
 ]
 
-# Belt and braces: make sure the SVG image-format plugin travels with the build,
-# otherwise the logo silently fails to load (the loader degrades gracefully, but
-# the icon would just be missing).
+from PyInstaller.utils.hooks import collect_dynamic_libs  # noqa: E402
+
+binaries = []
 try:
     binaries += collect_dynamic_libs("PyQt6")
-except Exception:  # pragma: no cover - hook not available
+except Exception:  # pragma: no cover - hook unavailable
     pass
+
+# --- Qt pruning ------------------------------------------------------------ #
+# Substrings matched against the *file name* of every collected binary. Anything
+# matching is dropped. Keep this list in sync with what the app actually uses:
+# QtCore, QtGui, QtWidgets, QtSvg (+ the platform/imageformat plugins).
+UNUSED_QT = (
+    "Qt6Quick", "Qt6Qml", "Qt6QuickControls2", "Qt6QuickTemplates2",
+    "Qt6QuickLayouts", "Qt6QuickShapes", "Qt6QuickEffects", "Qt6QuickWidgets",
+    "Qt6WebEngine", "Qt6WebChannel", "Qt6WebSockets", "Qt6WebView",
+    "Qt6Multimedia", "Qt6SpatialAudio", "Qt6TextToSpeech",
+    "Qt6QmlModels", "Qt6QmlWorkerScript", "Qt6QmlMeta", "Qt6QmlLocalStorage",
+    "Qt6QmlXmlListModel", "Qt6QuickTest", "Qt6QuickTimeline",
+    "Qt6QuickDialogs", "Qt6QuickParticles", "Qt6QuickVectorImage",
+    "Qt6Quick3D", "Qt6ShaderTools", "Qt6Concurrent",
+    "Qt6Charts", "Qt6DataVisualization", "Qt6Graphs",
+    "Qt6Pdf", "Qt6PdfQuick", "Qt6PdfWidgets",
+    "Qt6Help", "Qt6Designer", "Qt6UiTools",
+    "Qt6Sensors", "Qt6Positioning", "Qt6Location", "Qt6Nfc",
+    "Qt6RemoteObjects", "Qt6SerialPort", "Qt6SerialBus", "Qt6Bluetooth",
+    "Qt6Test", "Qt6Sql", "Qt6NetworkAuth", "Qt6HttpServer",
+    "Qt6OpenGLWidgets", "Qt6OpenGL", "Qt6EglFS", "Qt6Vulkan",
+    "Qt6WlShellIntegration", "Qt6WaylandCompositor",
+    "Qt6Scxml", "Qt6StateMachine", "Qt6VirtualKeyboard", "Qt6LabSettings",
+    "Qt6HttpServer", "Qt6Network",
+    # Media / codec stack pulled in by the multimedia plugins
+    "libavcodec", "libavformat", "libavutil", "libswscale", "libswresample",
+    "libQt6FFmpegStub",
+    # ICU data duplicated at the top level; Qt's own copy is kept inside PyQt6/
+    "libicudata.so.74", "libicuuc.so.74", "libicui18n.so.74",
+)
+
+# Qt plugin *directories* that belong to the pruned modules. Removing the whole
+# directory is cleaner than listing every plugin file.
+UNUSED_PLUGIN_DIRS = (
+    "qmltooling", "qmllint", "qmlls", "qmlformat", "scxmldatamodel",
+    "sceneparsers", "geometryloaders", "assetimporters", "renderers",
+    "renderplugins", "multimedia", "texttospeech", "sensors",
+    "position", "networkinformation", "webview", "designer", "help",
+    "sqldrivers", "tls", "egldeviceintegrations", "wayland-graphics-integration",
+    "wayland-shell-integration", "wayland-decoration-client",
+)
+
+
+def _keep(entry) -> bool:
+    """True when a collected binary/datas entry should stay in the bundle."""
+    # entries are (source, dest_dir) or (source, dest_dir, type)
+    source, dest = str(entry[0]), str(entry[1])
+    name = Path(source).name
+    full = f"{source}/{dest}"
+
+    if any(token in name for token in UNUSED_QT):
+        return False
+    if any(f"/{d}/" in full or full.endswith(f"/{d}") for d in UNUSED_PLUGIN_DIRS):
+        return False
+    return True
+
 
 a = Analysis(
     [str(PROJECT_ROOT / "main.py")],
@@ -82,21 +131,17 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        # Keep the bundle lean; none of these are imported by the app.
-        "tkinter",
-        "matplotlib",
-        "numpy",
-        "pandas",
-        "PyQt6.QtWebEngineCore",
-        "PyQt6.QtWebEngineWidgets",
-        "PyQt6.QtQuick",
-        "PyQt6.QtQml",
-        "PyQt6.Qt3DCore",
-        "PyQt6.QtMultimedia",
-        "PyQt6.QtBluetooth",
-        "PyQt6.QtNetworkAuth",
-        "PyQt6.QtCharts",
-        "PyQt6.QtDataVisualization",
+        # Python-level excludes. These stop the import graph from pulling the
+        # packages in at all; the Qt pruning above handles the Qt binaries.
+        "tkinter", "matplotlib", "numpy", "pandas", "PIL", "scipy",
+        "PyQt6.QtWebEngineCore", "PyQt6.QtWebEngineWidgets", "PyQt6.QtQuick",
+        "PyQt6.QtQml", "PyQt6.QtMultimedia", "PyQt6.QtCharts",
+        "PyQt6.QtDataVisualization", "PyQt6.QtNetwork", "PyQt6.QtSql",
+        "PyQt6.QtTest", "PyQt6.QtBluetooth", "PyQt6.QtDesigner",
+        "PyQt6.QtHelp", "PyQt6.QtOpenGL", "PyQt6.QtPdf", "PyQt6.QtPositioning",
+        "PyQt6.QtSensors", "PyQt6.QtSerialPort", "PyQt6.QtStateMachine",
+        "PyQt6.QtTextToSpeech", "PyQt6.QtWebChannel", "PyQt6.QtWebSockets",
+        "PyQt6.QtRemoteObjects", "PyQt6.QtScxml", "PyQt6.QtSpatialAudio",
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
@@ -104,23 +149,26 @@ a = Analysis(
     noarchive=False,
 )
 
+# --- apply the pruning ------------------------------------------------------ #
+_before = len(a.binaries) + len(a.datas)
+a.binaries = TOC([e for e in a.binaries if _keep(e)])
+a.datas = TOC([e for e in a.datas if _keep(e)])
+_after = len(a.binaries) + len(a.datas)
+print(f"[spec] pruned {_before - _after} unused Qt files "
+      f"({_before} -> {_after})")
+
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 if ONEFILE:
     exe = EXE(
-        pyz,
-        a.scripts,
-        a.binaries,
-        a.zipfiles,
-        a.datas,
-        [],
+        pyz, a.scripts, a.binaries, a.zipfiles, a.datas, [],
         name="bunney-pos",
         debug=False,
         bootloader_ignore_signals=False,
         strip=False,
-        upx=False,               # UPX breaks Qt plugins on some distros
+        upx=False,
         runtime_tmpdir=None,
-        console=False,           # no terminal window for a GUI app
+        console=False,
         disable_windowed_traceback=False,
         target_arch=None,
         codesign_identity=None,
@@ -129,9 +177,7 @@ if ONEFILE:
     )
 else:
     exe = EXE(
-        pyz,
-        a.scripts,
-        [],
+        pyz, a.scripts, [],
         exclude_binaries=True,
         name="bunney-pos",
         debug=False,
@@ -147,10 +193,7 @@ else:
     )
 
     coll = COLLECT(
-        exe,
-        a.binaries,
-        a.zipfiles,
-        a.datas,
+        exe, a.binaries, a.zipfiles, a.datas,
         strip=False,
         upx=False,
         upx_exclude=[],

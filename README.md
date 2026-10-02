@@ -108,6 +108,85 @@ checked without a display — useful if you're changing styles or layout.
 
 ---
 
+## Packaging & Installation
+
+The app runs on Windows and Linux from a single frozen build, so the target
+machine needs no Python and no virtual environment.
+
+### Where your data lives
+
+Worth knowing before you install, because it decides what a reinstall touches:
+
+| Mode | Database, backups, logs |
+| --- | --- |
+| Run from a portable folder | Beside the executable |
+| Installed (`.deb`, AppImage, Windows setup) | `~/.local/share/bunney-pos/` on Linux, `%LOCALAPPDATA%\bunney-pos` on Windows |
+
+An installed copy lives somewhere the user cannot write, so it keeps its data in
+your home directory instead. That is why uninstalling never deletes a cafe's
+sales history — the data isn't in the install directory. Delete the folder above
+by hand if you really want it gone.
+
+Override either with `BUNNEY_DATA_DIR` if you need to.
+
+### Linux — Debian/Ubuntu package
+
+```bash
+./packaging/build-deb.sh
+sudo apt install ./dist/bunney-pos_1.0.0_amd64.deb
+```
+
+Adds a menu entry and a desktop icon, and installs to `/opt/bunney-pos`. Remove
+it with `sudo apt remove bunney-pos`.
+
+### Linux — AppImage (any distro)
+
+```bash
+./packaging/build-appimage.sh
+chmod +x dist/BunneyPOS-1.0.0-x86_64.AppImage
+./dist/BunneyPOS-1.0.0-x86_64.AppImage
+```
+
+One file, no install, no root. Handy for trying it on a machine before
+committing to an install.
+
+### Windows — installer
+
+Build the executable first, then the setup file. Both steps need to run on
+Windows; PyInstaller cannot cross-compile.
+
+```powershell
+py -m venv .venv
+.venv\Scripts\pip install -r requirements.txt pyinstaller
+.venv\Scripts\pyinstaller --clean --noconfirm windows_build.spec
+```
+
+That gives you `dist\BunneyPOS.exe`. To turn it into a real setup program,
+install [Inno Setup](https://jrsoftware.org/isdl.php) and compile
+`installer.iss` — open it in the Inno Setup Compiler and press Compile, or from
+a terminal:
+
+```powershell
+& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer.iss
+```
+
+Result: `dist\BunneyPOS_v1.0.0_Setup.exe`. It installs to
+`Program Files\Bunney POS`, adds a Start Menu entry and an optional desktop
+shortcut, and registers an uninstaller in Add/Remove Programs.
+
+### Building a Linux release
+
+```bash
+./build-linux.sh            # frozen bundle in dist/bunney-pos-linux/
+./packaging/build-deb.sh    # .deb
+./packaging/build-appimage.sh   # AppImage
+```
+
+Build on the oldest distribution you intend to support — the bundle links
+against the build machine's glibc.
+
+---
+
 ## Project Layout
 
 The layers are kept apart on purpose: `models/` and `controllers/` contain no Qt
@@ -125,7 +204,11 @@ bunney_pos/
 ├── views/             PyQt6 UI (login, cashier, admin)
 ├── services/          ESC/POS printing, report export
 ├── tests/             four test suites plus render scripts
-└── assets/            stylesheets, icons, local database
+├── packaging/         .deb and AppImage builders, .desktop entry
+├── assets/            stylesheets, icons, local database
+├── bunney_pos.spec    PyInstaller spec (Linux)
+├── windows_build.spec PyInstaller spec (Windows)
+└── installer.iss      Inno Setup script (Windows installer)
 ```
 
 ---

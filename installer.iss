@@ -1,0 +1,146 @@
+; ---------------------------------------------------------------------------
+;  installer.iss — Inno Setup script for Bunney POS (Windows)
+;
+;  Wraps dist\BunneyPOS.exe into a standard Windows installer:
+;    BunneyPOS_v1.0.0_Setup.exe
+;
+;  What it does
+;    * installs to            C:\Program Files\Bunney POS
+;    * creates a desktop shortcut and a Start Menu entry
+;    * registers an uninstaller ("إلغاء التثبيت") in Apps & Features
+;    * offers an optional launch after install
+;
+;  Build it
+;    1. Build the exe first (see windows_build.spec):
+;         py -m venv .venv
+;         .venv\Scripts\pip install -r requirements.txt pyinstaller
+;         .venv\Scripts\pyinstaller --clean --noconfirm windows_build.spec
+;    2. Install Inno Setup 6:  https://jrsoftware.org/isdl.php
+;    3. Compile this script:
+;         "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+;       or open installer.iss in the Inno Setup IDE and press F9.
+;
+;  Output: dist\BunneyPOS_v1.0.0_Setup.exe
+;
+;  IMPORTANT — where the data goes
+;    The app writes its database, backups, receipts and logs to
+;      %LOCALAPPDATA%\bunney-pos
+;    It detects that Program Files is not writable and falls back there
+;    automatically. Nothing is written into the install directory, so the
+;    uninstaller never has to guess which files were user data.
+; ---------------------------------------------------------------------------
+
+#define MyAppName "Bunney POS"
+#define MyAppNameAr "نظام بُنّي للنقاط البيع"
+#define MyAppVersion "1.0.0"
+#define MyAppPublisher "Bunney POS"
+#define MyAppExeName "BunneyPOS.exe"
+#define MyAppId "{{8F3A5C21-9B4E-4E7A-9C1D-2A6B7E5D4C30}"
+
+[Setup]
+AppId={#MyAppId}
+AppName={#MyAppName}
+AppVersion={#MyAppVersion}
+AppVerName={#MyAppName} {#MyAppVersion}
+AppPublisher={#MyAppPublisher}
+VersionInfoVersion={#MyAppVersion}
+
+; Install into Program Files, which is what "standard desktop software" means
+; to a user. Needs admin, hence PrivilegesRequired=admin below.
+DefaultDirName={autopf}\{#MyAppName}
+DefaultGroupName={#MyAppName}
+DisableProgramGroupPage=yes
+AllowNoIcons=no
+
+; Output
+OutputDir=dist
+OutputBaseFilename=BunneyPOS_v{#MyAppVersion}_Setup
+Compression=lzma2/max
+SolidCompression=yes
+WizardStyle=modern
+SetupIconFile=assets\icons\logo.ico
+
+; Uninstaller naming — shown in Apps & Features.
+UninstallDisplayName={#MyAppName} ({#MyAppNameAr})
+UninstallDisplayIcon={app}\{#MyAppExeName}
+
+; 64-bit only, matching the PyInstaller build.
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+
+; Program Files needs elevation.
+PrivilegesRequired=admin
+PrivilegesRequiredOverridesAllowed=dialog
+
+; Windows 10 and newer.
+MinVersion=10.0
+
+[Languages]
+; Arabic is offered alongside English because that is the app's language.
+Name: "english"; MessagesFile: "compiler:Default.isl"
+Name: "arabic"; MessagesFile: "compiler:Languages\Arabic.isl"
+
+[Tasks]
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; \
+    GroupDescription: "{cm:AdditionalIcons}"; Flags: checkedonce
+
+[Files]
+; The single-file exe built by windows_build.spec.
+Source: "dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+
+; Icon and licence alongside it, so the user can find them.
+Source: "assets\icons\logo.ico"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "assets\icons\logo.svg"; DestDir: "{app}"; Flags: ignoreversion
+Source: "LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
+
+[Icons]
+; Start Menu entry.
+Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; \
+    IconFilename: "{app}\logo.ico"; Comment: "{#MyAppNameAr}"
+; Desktop shortcut (optional, ticked by default).
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; \
+    IconFilename: "{app}\logo.ico"; Comment: "{#MyAppNameAr}"; Tasks: desktopicon
+
+[Run]
+; Offer to launch straight after install.
+Filename: "{app}\{#MyAppExeName}"; \
+    Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; \
+    Flags: nowait postinstall skipifsilent
+
+[UninstallDelete]
+; Nothing from the app itself lives here, but Qt and PyInstaller can leave
+; caches behind. The user's data in %LOCALAPPDATA%\bunney-pos is deliberately
+; NOT touched — see the note in [Code].
+Type: filesandordirs; Name: "{app}\_internal"
+Type: dirifempty; Name: "{app}"
+
+[Code]
+{ -------------------------------------------------------------------------
+  On uninstall, ask whether to also delete the user's data.
+
+  The database holds a cafe's entire sales history, so removing it silently
+  would be unforgivable. Defaulting to "No" means the safe outcome needs no
+  thought, and an operator who really wants a clean machine can say yes.
+  ------------------------------------------------------------------------- }
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  DataDir: String;
+  Response: Integer;
+begin
+  if CurUninstallStep = usPostUninstall then
+  begin
+    DataDir := ExpandConstant('{localappdata}\bunney-pos');
+    if DirExists(DataDir) then
+    begin
+      Response := MsgBox(
+        'Also delete your Bunney POS data?' + #13#10 + #13#10 +
+        'This permanently removes the database, backups, receipts and logs from:'
+        + #13#10 + DataDir + #13#10 + #13#10 +
+        'Choose No to keep your sales history (recommended).',
+        mbConfirmation, MB_YESNO or MB_DEFBUTTON2);
+      if Response = IDYES then
+        DelTree(DataDir, True, True, True);
+    end;
+  end;
+end;
