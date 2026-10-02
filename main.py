@@ -27,6 +27,27 @@ from database.db_manager import DatabaseError, get_db, now_stamp
 # --------------------------------------------------------------------------- #
 
 
+def _force_utf8_streams() -> None:
+    """
+    Make stdout/stderr UTF-8 capable.
+
+    On Windows the console defaults to a legacy codepage (cp1252 or similar), so
+    printing the Arabic café name or a currency symbol raises UnicodeEncodeError
+    and takes the whole run down. Reconfiguring the stream fixes it, and the
+    errors="replace" fallback means a truly incapable terminal degrades to
+    question marks instead of crashing.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        if stream is None:
+            continue
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, OSError, ValueError):
+            # Not a TextIOWrapper (e.g. redirected to something exotic); the
+            # errors="replace" behaviour below still protects the prints.
+            pass
+
+
 def setup_logging() -> None:
     config.ensure_directories()
     handlers: list[logging.Handler] = [
@@ -287,6 +308,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--screenshot", metavar="PATH", help="render the login screen to a PNG and exit")
     args = parser.parse_args(argv)
 
+    # Must happen before anything prints: the console on Windows is not UTF-8 by
+    # default and the app's output is Arabic.
+    _force_utf8_streams()
     setup_logging()
 
     if args.db:

@@ -19,10 +19,15 @@ Key decisions recorded here:
 
 from __future__ import annotations
 
+import logging
 import os
+import string
+import subprocess
 import sys
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # --------------------------------------------------------------------------- #
 # Application identity
@@ -198,11 +203,14 @@ WINDOW_MIN_HEIGHT = 720
 STARTUP_BUDGET_MS = 3000          # spec: cold start under 3 seconds
 
 # Arabic-first font stack with sane cross-platform fallbacks.
+# Windows has no Noto Naskh or Cairo by default, but Segoe UI and Tahoma both
+# carry Arabic glyphs; putting them early means Windows does not fall back to a
+# font that lacks the script (which renders Arabic as empty boxes).
 FONT_FAMILY = (
-    "Noto Naskh Arabic, Cairo, Tajawal, Almarai, Segoe UI, "
+    "Noto Naskh Arabic, Cairo, Tajawal, Almarai, Segoe UI, Tahoma, "
     "DejaVu Sans, sans-serif"
 )
-FONT_FAMILY_MONO = "JetBrains Mono, Cascadia Mono, DejaVu Sans Mono, monospace"
+FONT_FAMILY_MONO = "JetBrains Mono, Cascadia Mono, Consolas, DejaVu Sans Mono, monospace"
 
 # Warm, human-centred coffee palette (charcoal + warm white + caramel accent).
 # Kept here so both QSS generation and chart colours share one source of truth.
@@ -388,9 +396,17 @@ def ensure_directories() -> None:
 PRIVATE_FILE_MODE = 0o600
 PRIVATE_DIR_MODE = 0o700
 
+# Windows does not implement POSIX permission bits: chmod there only toggles the
+# read-only flag and cannot express "owner only". The security model is instead
+# the ACL inherited from %LOCALAPPDATA%, which is already restricted to the
+# account. So skip the calls rather than pretend they did something.
+SUPPORTS_POSIX_MODES = os.name == "posix"
+
 
 def secure_file(path, mode: int = PRIVATE_FILE_MODE) -> None:
     """Restrict a file to its owner. Best-effort: never fatal, never raises."""
+    if not SUPPORTS_POSIX_MODES:
+        return
     try:
         target = Path(path)
         if target.exists():
@@ -406,7 +422,8 @@ def secure_dir(path, mode: int = PRIVATE_DIR_MODE) -> None:
     try:
         target = Path(path)
         target.mkdir(parents=True, exist_ok=True)
-        target.chmod(mode)
+        if SUPPORTS_POSIX_MODES:
+            target.chmod(mode)
     except OSError:
         pass
 
@@ -415,3 +432,101 @@ def secure_sqlite_sidecars(db_path) -> None:
     """Restrict the -wal and -shm files that accompany a WAL-mode database."""
     for suffix in ("", "-wal", "-shm", "-journal"):
         secure_file(Path(str(db_path) + suffix))
+
+
+# --------------------------------------------------------------------------- #
+# Platform integration
+# --------------------------------------------------------------------------- #
+# Everything that behaves differently on Windows lives here, so no view or
+# service has to test sys.platform itself. Keeping it in one place is also what
+# makes the Windows build work without any manual edits.
+IS_WINDOWS = sys.platform.startswith("win")
+IS_MACOS = sys.platform == "darwin"
+IS_LINUX = sys.platform.startswith("linux")
+
+
+def open_in_file_manager(path) -> bool:
+    """
+    Show a folder or file in the desktop's file manager. Returns True if a
+    launcher was started.
+
+    Deliberately returns a bool rather than raising: this is a convenience
+    button, and a failure should show a path to the user, not an error dialog.
+    """
+    target = Path(path)
+    try:
+        if IS_WINDOWS:
+            # startfile is the shell's "open" verb. No subprocess, no quoting
+            # bugs, and it handles paths with spaces correctly.
+            os.startfile(str(target))  # type: ignore[attr-defined]
+            return True
+        if IS_MACOS:
+            subprocess.Popen(["open", str(target)])
+            return True
+        subprocess.Popen(["xdg-open", str(target)])
+        return True
+    except Exception:
+        logger.debug("could not open %s in the file manager", target, exc_info=True)
+        return False
+
+
+def open_file_with_default_app(path) -> bool:
+    """Open a file in whatever application the user has associated with it."""
+    target = Path(path)
+    try:
+        if IS_WINDOWS:
+            os.startfile(str(target))  # type: ignore[attr-defined]
+            return True
+        if IS_MACOS:
+            subprocess.Popen(["open", str(target)])
+            return True
+        subprocess.Popen(["xdg-open", str(target)])
+        return True
+    except Exception:
+        logger.debug("could not open %s", target, exc_info=True)
+        return False
+
+
+def is_on_separate_device(path) -> bool:
+    """
+    True when `path` sits on a different filesystem from the app — the check
+    behind "is this really an external drive?".
+
+    On POSIX, st_dev is the device id, so a USB stick mounted under /media
+    compares unequal to the app's own filesystem. On Windows st_dev is
+    unreliable (it is frequently 0 for every drive), so use the drive letter,
+    which is exactly the notion of "different volume" the user has in mind.
+    """
+    try:
+        target = Path(path)
+        if IS_WINDOWS:
+            return target.resolve().drive.lower() != BASE_DIR.resolve().drive.lower()
+        return os.stat(target).st_dev != os.stat(BASE_DIR).st_dev
+    except OSError:
+        return False
+
+
+def drive_roots() -> list[Path]:
+    """
+    Candidate mount points to look for external volumes in.
+
+    Linux: the usual automount directories, plus /mnt for a manual mount.
+    Windows: every drive letter that currently exists (C:, D:, E: ...).
+    macOS: /Volumes.
+    """
+    if IS_WINDOWS:
+        return [Path(f"{letter}:\\") for letter in string.ascii_uppercase
+                if Path(f"{letter}:\\").exists()]
+
+    if IS_MACOS:
+        volumes = Path("/Volumes")
+        return [volumes] if volumes.is_dir() else []
+
+    home = Path.home().name
+    candidates = [
+        Path("/media") / home,
+        Path("/run/media") / home,
+        Path("/mnt"),
+        Path("/media"),
+    ]
+    return [c for c in candidates if c.is_dir()]

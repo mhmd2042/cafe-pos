@@ -144,16 +144,13 @@ class BackupController:
 
     def is_on_separate_device(self, path: Path) -> bool:
         """
-        Heuristic for "this is a different drive": compare device ids.
+        Heuristic for "this is a different drive".
 
-        A USB stick mounted at /media/... has a different st_dev from the app
-        folder, so this distinguishes a real external target from a local path
-        the admin happened to type.
+        Delegates to config.is_on_separate_device, which compares st_dev on POSIX
+        (a USB stick under /media has a different device id) and falls back to
+        the drive letter on Windows, where st_dev is not reliable.
         """
-        try:
-            return os.stat(path).st_dev != os.stat(config.BASE_DIR).st_dev
-        except OSError:
-            return False
+        return config.is_on_separate_device(path)
 
     def status(self) -> dict[str, Any]:
         """Health summary for the admin screen."""
@@ -179,29 +176,28 @@ class BackupController:
         """
         Candidate destinations on this machine.
 
-        Linux: mounted volumes under /media/<user>, /run/media/<user> and /mnt.
-        Windows: existing drive letters, flagged removable when we can tell.
+        The mount points come from config.drive_roots(), so Windows scans drive
+        letters, Linux the usual /media and /mnt locations, and macOS /Volumes.
         """
         drives: list[DriveInfo] = [DriveInfo(str(config.LOCAL_BACKUP_DIR), "مجلد التطبيق (محلي)")]
 
         candidates: list[Path] = []
-        if sys.platform.startswith("win"):  # pragma: no cover - platform specific
-            for letter in string.ascii_uppercase:
-                root = Path(f"{letter}:\\")
-                if root.exists():
-                    candidates.append(root)
+        if config.IS_WINDOWS:  # pragma: no cover - platform specific
+            # Drive letters are already the volumes themselves.
+            candidates.extend(config.drive_roots())
         else:
-            home = Path.home().name
-            for base in (Path("/media") / home, Path("/run/media") / home, Path("/mnt"),
-                         Path("/media")):
-                if not base.is_dir():
-                    continue
-                try:
-                    for child in base.iterdir():
-                        if child.is_dir() and not child.name.startswith("."):
-                            candidates.append(child)
-                except OSError:
-                    continue
+            for base in config.drive_roots():
+                # On Linux/macOS the roots are directories that *contain*
+                # mounts, so list their children.
+                if base == Path("/mnt") or base.name == Path.home().name or base == Path("/Volumes"):
+                    try:
+                        for child in base.iterdir():
+                            if child.is_dir() and not child.name.startswith("."):
+                                candidates.append(child)
+                    except OSError:
+                        continue
+                else:
+                    candidates.append(base)
 
         seen: set[str] = set()
         for path in candidates:

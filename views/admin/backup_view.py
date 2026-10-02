@@ -91,7 +91,11 @@ class BackupView(QWidget):
         row.setSpacing(8)
 
         self.path_edit = QLineEdit()
-        self.path_edit.setPlaceholderText("/media/usb/Cafe_Backups")
+        # Show a plausible example for the platform the app is actually running
+        # on — an admin on Windows should not be told to look for /media/usb.
+        self.path_edit.setPlaceholderText(
+            r"E:\Cafe_Backups" if config.IS_WINDOWS else "/media/usb/Cafe_Backups"
+        )
         self.path_edit.setMinimumHeight(config.MIN_TOUCH_TARGET - 8)
         self.path_edit.textChanged.connect(lambda: self._update_target_state())
         row.addWidget(self.path_edit, 1)
@@ -352,19 +356,7 @@ class BackupView(QWidget):
         self.toast.show_message(result.message, kind, 6000)
 
     def _open_local_folder(self) -> None:
-        import subprocess
-        import sys
-
-        path = config.LOCAL_BACKUP_DIR
-        try:
-            if sys.platform.startswith("win"):  # pragma: no cover
-                import os
-
-                os.startfile(str(path))  # type: ignore[attr-defined]
-            elif sys.platform == "darwin":  # pragma: no cover
-                subprocess.Popen(["open", str(path)])
-            else:
-                subprocess.Popen(["xdg-open", str(path)])
-        except Exception as exc:
-            logger.debug("تعذّر فتح المجلد: %s", exc)
-            self.toast.show_message(f"مجلد النسخ: {path}", "info", 6000)
+        # config.open_in_file_manager picks the right launcher per platform
+        # (startfile / open / xdg-open) and never raises.
+        if not config.open_in_file_manager(config.LOCAL_BACKUP_DIR):
+            self.toast.show_message(f"مجلد النسخ: {config.LOCAL_BACKUP_DIR}", "info", 6000)

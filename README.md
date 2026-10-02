@@ -150,29 +150,54 @@ chmod +x dist/BunneyPOS-1.0.0-x86_64.AppImage
 One file, no install, no root. Handy for trying it on a machine before
 committing to an install.
 
-### Windows — installer
+### Windows — one command
 
-Build the executable first, then the setup file. Both steps need to run on
-Windows; PyInstaller cannot cross-compile.
+PyInstaller cannot cross-compile, so this must run on Windows. Everything else
+is automatic:
+
+```bat
+build-windows.bat
+```
+
+That creates the virtual environment, installs the dependencies, regenerates the
+icon, builds `dist\BunneyPOS.exe`, and — if Inno Setup is installed — also
+produces `dist\BunneyPOS_v1.0.0_Setup.exe`.
+
+To do it by hand instead:
 
 ```powershell
 py -m venv .venv
 .venv\Scripts\pip install -r requirements.txt pyinstaller
+.venv\Scripts\python tools\make_icons.py          # logo.svg -> logo.ico
 .venv\Scripts\pyinstaller --clean --noconfirm windows_build.spec
 ```
 
-That gives you `dist\BunneyPOS.exe`. To turn it into a real setup program,
-install [Inno Setup](https://jrsoftware.org/isdl.php) and compile
-`installer.iss` — open it in the Inno Setup Compiler and press Compile, or from
-a terminal:
+The installer script is [Inno Setup](https://jrsoftware.org/isdl.php). Open
+`installer.iss` and press Compile, or from a terminal:
 
 ```powershell
 & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer.iss
 ```
 
-Result: `dist\BunneyPOS_v1.0.0_Setup.exe`. It installs to
-`Program Files\Bunney POS`, adds a Start Menu entry and an optional desktop
-shortcut, and registers an uninstaller in Add/Remove Programs.
+`dist\BunneyPOS_v1.0.0_Setup.exe` installs to `Program Files\Bunney POS`, adds a
+Start Menu entry and an optional desktop shortcut, and registers an uninstaller
+in Apps & Features.
+
+### Moving the project to Windows
+
+Copy the folder and run `build-windows.bat`. Nothing needs editing by hand: the
+paths are resolved at runtime, the `.ico` is committed, and the spec already
+carries the Qt pruning. The only requirement is Python 3.11 or newer.
+
+Two things worth knowing:
+
+- **Do not copy `.venv\`** — a virtual environment is not portable between
+  machines or platforms. Let the script rebuild it. `.gitignore` already
+  excludes it.
+- **The database is not in the repo.** A fresh install seeds itself with the
+  sample menu on first launch. To move real sales data across, copy
+  `assets/database/bunney_pos.db` into the data directory (see the table above)
+  while the app is closed.
 
 ### Building a Linux release
 

@@ -200,12 +200,13 @@ class PrinterService:
             return False
 
     @staticmethod
-    def _cups_available() -> bool:
-        return bool(shutil.which("lp"))
+    def _windows_spooler_available() -> bool:
+        """True on Windows, where the print spooler is always present."""
+        return config.IS_WINDOWS
 
     @staticmethod
-    def _windows_spooler_available() -> bool:
-        return sys.platform.startswith("win")
+    def _cups_available() -> bool:
+        return bool(shutil.which("lp"))
 
     def detect_backend(self) -> str:
         """
@@ -216,7 +217,7 @@ class PrinterService:
         forced = self.configured_backend()
         if forced in ("escpos", "cups", "windows", "file"):
             return forced
-        # auto
+        # auto — prefer a real printer, in order of reliability on this platform
         if self._has_escpos_library() and self.printer_name():
             return "escpos"
         if self._cups_available() and self.printer_name():
@@ -619,9 +620,143 @@ class PrinterService:
         if result.returncode != 0:
             raise RuntimeError(result.stderr.strip() or "فشل أمر lp")
 
+    @classmethod
+    def _image_to_escpos_raster(cls, image_path: Path) -> bytes:
+        """
+        Convert a 1-bit receipt image into an ESC/POS `GS v 0` raster block.
+
+        A thermal printer understands ESC/POS, not PNG. Writing PNG bytes to the
+        spooler as a RAW job would print pages of garbage, so the image is
+        converted to the raster command the printer actually accepts:
+
+            GS v 0 m xL xH yL yH d1...dk
+
+        Qt's Format_Mono packs scanlines in exactly the layout ESC/POS expects:
+        the leftmost pixel of a row is the HIGH bit of the first byte, and a SET
+        bit means ink. Verified by round-tripping: decode the produced bytes the
+        way a printer would and compare against the source, pixel for pixel. No
+        bit mirroring or inversion is needed — an earlier version of this method
+        did both and printed mirrored, inverted receipts.
+
+        The one real hazard is that Format_Mono is INDEXED, and Qt's colour table
+        is not stable: a painted image can come back with index 0 = black while a
+        PNG loaded from disk gives index 0 = white. Since the raw bits are read
+        directly (not via pixelIndex) that does not affect correctness here, but
+        the table is still normalised so the bytes mean the same thing for every
+        caller.
+
+        QImage pads rows to a 32-bit boundary, so rows are copied individually
+        using the real stride rather than slicing the whole buffer.
+        """
+        from PyQt6.QtGui import QImage
+
+        image = QImage(str(image_path))
+        if image.isNull():
+            raise RuntimeError(f"تعذّر قراءة صورة الإيصال: {image_path}")
+        if image.format() != QImage.Format.Format_Mono:
+            image = image.convertToFormat(QImage.Format.Format_Mono,
+                                          Qt.ImageConversionFlag.MonoOnly)
+
+        # Normalise the palette so index 0 is black regardless of how Qt built
+        # the table. The raw bits are what get transmitted, so this is for
+        # consistency rather than correctness.
+        if image.color(0) != 0xFF000000:
+            image.setColor(0, 0xFF000000)
+            image.setColor(1, 0xFFFFFFFF)
+
+        width = image.width()
+        height = image.height()
+        # GS v 0 addresses whole bytes per row.
+        bytes_per_row = (width + 7) // 8
+        x_l, x_h = bytes_per_row & 0xFF, (bytes_per_row >> 8) & 0xFF
+        y_l, y_h = height & 0xFF, (height >> 8) & 0xFF
+
+        header = bytes([0x1D, 0x76, 0x30, 0x00, x_l, x_h, y_l, y_h])
+
+        stride = image.bytesPerLine()
+        raw = bytes(image.constBits().asstring(stride * height))
+
+        body = bytearray()
+        for row in range(height):
+            line = raw[row * stride: row * stride + bytes_per_row]
+            if len(line) < bytes_per_row:  # defensive: pad a short scanline
+                line += bytes(bytes_per_row - len(line))
+            body += line
+
+        # Feed a little, then cut — most 58mm printers need the feed to clear the
+        # cutter.
+        return header + bytes(body) + b"\n\n\n" + bytes([0x1D, 0x56, 0x42, 0x00])
+
     def _send_windows(self, data: ReceiptData, image_path: Path) -> None:
-        """Windows: print the rendered image through the default handler."""
-        os.startfile(str(image_path), "print")  # type: ignore[attr-defined]
+        """
+        Windows: send an ESC/POS raster job to the print spooler.
+
+        Deliberately NOT os.startfile(path, "print"): that hands the file to
+        whatever application owns the .png association, which on a clean Windows
+        machine is Photos — so the receipt would open in an image viewer, or
+        silently do nothing.
+
+        A café's thermal printer is installed with its own Windows driver, so
+        writing the raster bytes to its queue as a RAW job is what actually
+        prints. The default printer is used unless a name is configured.
+        """
+        import ctypes
+        from ctypes import wintypes
+
+        printer = self.printer_name()
+        payload = self._image_to_escpos_raster(image_path)
+
+        winspool = ctypes.WinDLL("winspool.drv", use_last_error=True)
+
+        handle = wintypes.HANDLE()
+        winspool.OpenPrinterW.argtypes = [wintypes.LPWSTR,
+                                          ctypes.POINTER(wintypes.HANDLE),
+                                          ctypes.c_void_p]
+        winspool.OpenPrinterW.restype = wintypes.BOOL
+        if not winspool.OpenPrinterW(printer or None, ctypes.byref(handle), None):
+            raise RuntimeError(f"تعذّر فتح الطابعة: {printer or 'الافتراضية'}")
+
+        class DOC_INFO_1(ctypes.Structure):
+            _fields_ = [("pDocName", wintypes.LPWSTR),
+                        ("pOutputFile", wintypes.LPWSTR),
+                        ("pDatatype", wintypes.LPWSTR)]
+
+        doc = DOC_INFO_1()
+        doc.pDocName = f"Bunney POS receipt {data.order_number or ''}".strip()
+        doc.pOutputFile = None
+        doc.pDatatype = "RAW"
+
+        try:
+            winspool.StartDocPrinterW.argtypes = [wintypes.HANDLE, wintypes.DWORD,
+                                                  ctypes.POINTER(DOC_INFO_1)]
+            winspool.StartDocPrinterW.restype = wintypes.DWORD
+            if not winspool.StartDocPrinterW(handle, 1, ctypes.byref(doc)):
+                raise RuntimeError("تعذّر بدء مهمة الطباعة")
+
+            try:
+                winspool.StartPagePrinter.argtypes = [wintypes.HANDLE]
+                winspool.StartPagePrinter.restype = wintypes.BOOL
+                if not winspool.StartPagePrinter(handle):
+                    raise RuntimeError("تعذّر بدء الصفحة")
+
+                written = wintypes.DWORD(0)
+                buffer = ctypes.create_string_buffer(payload, len(payload))
+                winspool.WritePrinter.argtypes = [wintypes.HANDLE, ctypes.c_void_p,
+                                                  wintypes.DWORD,
+                                                  ctypes.POINTER(wintypes.DWORD)]
+                winspool.WritePrinter.restype = wintypes.BOOL
+                if not winspool.WritePrinter(handle, buffer, len(payload),
+                                             ctypes.byref(written)):
+                    raise RuntimeError("فشلت كتابة بيانات الطباعة")
+
+                winspool.EndPagePrinter.argtypes = [wintypes.HANDLE]
+                winspool.EndPagePrinter(handle)
+            finally:
+                winspool.EndDocPrinter.argtypes = [wintypes.HANDLE]
+                winspool.EndDocPrinter(handle)
+        finally:
+            winspool.ClosePrinter.argtypes = [wintypes.HANDLE]
+            winspool.ClosePrinter(handle)
 
     # -- fallback artefacts ------------------------------------------------ #
     @staticmethod
