@@ -16,12 +16,14 @@ from __future__ import annotations
 
 import logging
 import re
+from pathlib import Path
 
 import config
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["Theme", "apply_theme", "toggle_theme", "available_themes", "PaletteProxy"]
+__all__ = ["Theme", "apply_theme", "toggle_theme", "available_themes", "PaletteProxy",
+           "app_icon", "apply_app_icon"]
 
 _QT_IMPORT_ERROR: Exception | None = None
 try:  # Qt is only needed by the UI layer
@@ -137,3 +139,46 @@ class PaletteProxy:
 
     def __getitem__(self, token: str) -> str:
         return self._theme.color(token)
+
+
+# --------------------------------------------------------------------------- #
+# Application icon
+# --------------------------------------------------------------------------- #
+def app_icon() -> "QIcon":
+    """
+    The window/taskbar icon, loaded from assets/icons/logo.svg.
+
+    SVG is used so one file scales from a 16 px taskbar entry to a 256 px
+    launcher icon. Qt renders it through its imageformats plugin; if that plugin
+    is missing (a stripped PyQt6 build) the icon is simply absent rather than
+    fatal — a café till must still open.
+    """
+    if _QT_IMPORT_ERROR is not None:
+        return None
+
+    from PyQt6.QtGui import QIcon
+
+    path = Path(config.LOGO_PATH)
+    if not path.exists():
+        logger.debug("ملف الشعار غير موجود: %s", path)
+        return QIcon()
+
+    icon = QIcon(str(path))
+    if icon.isNull():
+        logger.warning(
+            "تعذّر تحميل الشعار (%s) — قد لا تكون إضافة SVG مثبّتة في Qt", path.name
+        )
+    return icon
+
+
+def apply_app_icon(app) -> "QIcon":
+    """
+    Set the icon for the whole application, so every window and dialog inherits
+    it without each one calling setWindowIcon.
+    """
+    if app is None or _QT_IMPORT_ERROR is not None:
+        return None
+    icon = app_icon()
+    if icon is not None and not icon.isNull():
+        app.setWindowIcon(icon)
+    return icon

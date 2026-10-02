@@ -1,5 +1,5 @@
 """
-config.py — Application configuration & constants for Café POS.
+config.py — Application configuration & constants for Bunney POS.
 
 This module is deliberately dependency-free (stdlib only) so that every other
 layer (database, models, controllers, views, services) can import it without
@@ -27,9 +27,9 @@ from pathlib import Path
 # --------------------------------------------------------------------------- #
 # Application identity
 # --------------------------------------------------------------------------- #
-APP_NAME = "Café POS"
-APP_NAME_AR = "نظام نقاط البيع — المقهى"
-APP_ID = "cafe_pos"
+APP_NAME = "Bunney POS"
+APP_NAME_AR = "نظام بُنّي للنقاط البيع"
+APP_ID = "bunney_pos"
 VERSION = "1.0.0"
 PHASE = 5  # final phase — see README/plan
 
@@ -45,6 +45,7 @@ else:
 ASSETS_DIR = BASE_DIR / "assets"
 STYLES_DIR = ASSETS_DIR / "styles"
 ICONS_DIR = ASSETS_DIR / "icons"
+LOGO_PATH = Path(os.environ.get("BUNNEY_LOGO", ICONS_DIR / "logo.svg"))
 
 # Primary SQLite database lives inside the app folder (per architecture spec).
 DB_DIR = ASSETS_DIR / "database"

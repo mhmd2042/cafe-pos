@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Café POS — "Warm Roast" DARK theme
+   Bunney POS — "Warm Roast" DARK theme
    Colour/typography tokens are substituted by views/theme.py from
    config.THEME_DARK before this stylesheet is applied.
    Warm charcoal surfaces, caramel accent, high contrast for low-light

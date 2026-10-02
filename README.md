@@ -1,4 +1,4 @@
-# Café POS
+# Bunney POS
 
 A local, offline desktop point-of-sale and accounting app for a small café.
 Python 3, PyQt6 and SQLite. It runs on Windows and Linux, needs no internet
@@ -115,7 +115,7 @@ imports at all, which is why the money, auth, stock and reporting logic is all
 testable without a display.
 
 ```
-cafe_pos/
+bunney_pos/
 ├── main.py            entry point (GUI, --selftest, --screenshot, --reset)
 ├── config.py          constants, money/tax helpers, theme palettes
 ├── run.sh             launcher

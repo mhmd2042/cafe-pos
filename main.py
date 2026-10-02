@@ -1,5 +1,5 @@
 """
-main.py — Café POS application entry point.
+main.py — Bunney POS application entry point.
 
 Phase 2: boots the database, applies the warm theme and opens the PIN-pad login.
 The Phase-1 database self-test is still available via --selftest.
@@ -210,7 +210,7 @@ def run_app(argv: list[str] | None = None) -> int:
         return 3
 
     from views.main_window import MainWindow
-    from views.theme import Theme, apply_theme
+    from views.theme import Theme, apply_app_icon, apply_theme
 
     db = get_db()
     theme_name = db.get_setting("theme", config.ACTIVE_THEME)
@@ -222,6 +222,10 @@ def run_app(argv: list[str] | None = None) -> int:
     app.setLayoutDirection(
         __import__("PyQt6.QtCore", fromlist=["Qt"]).Qt.LayoutDirection.RightToLeft
     )
+
+    # Set on the QApplication so every window and dialog inherits the logo
+    # without each one calling setWindowIcon itself.
+    apply_app_icon(app)
 
     theme = apply_theme(app, theme_name)
 
@@ -247,11 +251,12 @@ def run_screenshot(path: str) -> int:
 
     from controllers.auth_controller import AuthController
     from views.main_window import MainWindow
-    from views.theme import apply_theme
+    from views.theme import apply_app_icon, apply_theme
 
     db = get_db()
     app = QApplication([sys.argv[0]])
     app.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+    apply_app_icon(app)
     theme = apply_theme(app, db.get_setting("theme", "dark"))
 
     window = MainWindow(AuthController(), theme=theme)

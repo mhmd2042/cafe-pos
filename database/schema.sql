@@ -1,5 +1,5 @@
 -- ========================================================================= --
---  Café POS — SQLite schema (Phase 1)
+--  Bunney POS — SQLite schema (Phase 1)
 --  Offline-first, single-file database. Applied by database/db_manager.py.
 --
 --  CONVENTIONS

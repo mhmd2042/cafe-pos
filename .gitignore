@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------------------
-# Café POS — .gitignore
+# Bunney POS — .gitignore
 #
 # The rule of thumb here: NEVER commit a real café's data. The database, its
 # backups, the receipts and the logs all contain sales history, revenue figures

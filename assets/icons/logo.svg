@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Bunney POS">
+  <title>Bunney POS</title>
+  <defs>
+    <linearGradient id="bean" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#E8B473"/>
+      <stop offset="0.6" stop-color="#C98F4B"/>
+      <stop offset="1" stop-color="#9A6526"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Warm charcoal badge. Kept tight so the bean can be as large as possible:
+       this icon has to survive being scaled to 16px in a taskbar. -->
+  <rect x="3" y="3" width="122" height="122" rx="28" fill="#221D19"/>
+
+  <!-- Coffee bean, enlarged and with a bold crease. The crease carries the
+       identity at small sizes, so it is thick and high-contrast against the
+       bean rather than a subtle line. -->
+  <g transform="translate(64 64) rotate(-16)">
+    <ellipse rx="40" ry="47" fill="url(#bean)"/>
+    <path d="M0 -40 C 21 -17, -21 17, 0 40"
+          fill="none" stroke="#241C15" stroke-width="10"
+          stroke-linecap="round"/>
+  </g>
+</svg>

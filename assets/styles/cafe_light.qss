@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Café POS — "Warm Roast" LIGHT theme
+   Bunney POS — "Warm Roast" LIGHT theme
    Same structure as cafe_dark.qss; tokens come from config.THEME_LIGHT.
    Warm whites and paper tones so it still reads as a café, not a spreadsheet.
    ========================================================================== */

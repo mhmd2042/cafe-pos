@@ -1,5 +1,5 @@
 """
-database/db_manager.py — SQLite connection manager for Café POS.
+database/db_manager.py — SQLite connection manager for Bunney POS.
 
 Responsibilities
     * One process-wide singleton (DatabaseManager.get_instance()).
