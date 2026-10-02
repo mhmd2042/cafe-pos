@@ -172,39 +172,18 @@ chmod 0755 "$STAGE/DEBIAN/postinst" "$STAGE/DEBIAN/postrm"
 mkdir -p "$ROOT/dist"
 rm -f "$OUT"
 
-# A .deb is an `ar` archive containing exactly three members, in this order:
-#   debian-binary   the format version, "2.0\n"
-#   control.tar.*    control metadata + maintainer scripts
-#   data.tar.*       the filesystem payload
-#
-# It is assembled by hand rather than with `dpkg-deb --build`, which is broken
-# in this build environment: it silently produces a 1 KB archive with zero
-# payload entries (and hangs at 0% CPU when using xz). The format is simple and
-# fully specified, so building it directly is both correct and predictable.
 # md5sums let dpkg verify the install.
 ( cd "$STAGE" && find . -path ./DEBIAN -prune -o -type f -print0 \
     | xargs -0 md5sum > DEBIAN/md5sums ) 2>/dev/null || true
 
-# The ar members are written OUTSIDE the staging tree. Building them inside it
-# makes them match their own file list, so they end up nested in the payload and
-# get installed at the filesystem root (/control.tar.gz). Keeping them in a
-# scratch dir avoids that entirely.
-TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
+# Compression level matters more than it looks. dpkg-deb defaults to multi
+# threaded xz, which takes over ten minutes on ~190 MB of Qt libraries; gzip
+# finishes the same tree in under three and produces a comparably sized package
+# (~68 MB vs ~69 MB). For a release that gets rebuilt often, that is the right
+# trade. Override with DEB_COMPRESS=... if you want maximum compression.
+DEB_COMPRESS="${DEB_COMPRESS:-gzip}"
 
-printf '2.0\n' > "$TMP/debian-binary"
-
-# Control archive: ./control and the maintainer scripts, no leading directory.
-tar --owner=0 --group=0 --numeric-owner -czf "$TMP/control.tar.gz" \
-    -C "$STAGE/DEBIAN" ./control ./md5sums ./postinst ./postrm
-
-# Data archive: everything except the DEBIAN control directory.
-tar --owner=0 --group=0 --numeric-owner -czf "$TMP/data.tar.gz" \
-    --exclude=./DEBIAN -C "$STAGE" .
-
-# Assemble. The members must be added in order; dpkg expects plain `ar` format.
-( cd "$TMP" && ar rc "$OUT" debian-binary control.tar.gz data.tar.gz )
-rm -f "$STAGE/debian-binary"
+dpkg-deb "-Z${DEB_COMPRESS}" --build --root-owner-group "$STAGE" "$OUT" >/dev/null
 
 # --- verify ---------------------------------------------------------------- #
 # A truncated .deb only fails later, on the user's machine, so check it here.
