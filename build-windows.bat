@@ -118,6 +118,10 @@ echo.
 echo  Portable:  dist\BunneyPOS.exe            (copy to any PC and run)
 echo  Installer: dist\BunneyPOS_v1.0.0_Setup.exe
 echo.
+echo  The installer is password-protected. The password is in
+echo  installer.iss under [Setup] -> Password=...
+echo  Change it there and recompile to set your own.
+echo.
 echo  Data is written next to the exe, or to %%LOCALAPPDATA%%\bunney-pos
 echo  when the exe sits somewhere read-only like Program Files.
 echo.

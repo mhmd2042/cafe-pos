@@ -45,6 +45,13 @@ AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 VersionInfoVersion={#MyAppVersion}
 
+; --- Password protection ---------------------------------------------------
+; The installer will NOT proceed and will NOT extract any files until the
+; correct password is entered. Encryption=yes is required for Password to work.
+; To change the password, edit the line below and recompile installer.iss.
+Password=REDACTED_SETUP_PASSWORD
+Encryption=yes
+
 ; Install into Program Files, which is what "standard desktop software" means
 ; to a user. Needs admin, hence PrivilegesRequired=admin below.
 DefaultDirName={autopf}\{#MyAppName}
