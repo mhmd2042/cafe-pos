@@ -22,7 +22,7 @@ cd "$ROOT"
 
 VERSION="$(sed -n 's/^VERSION = "\(.*\)"/\1/p' config.py | head -1)"
 ARCH_LABEL="x86_64"
-BUNDLE="$ROOT/dist/bunney-pos-linux"
+BUNDLE="$ROOT/dist/linux"
 APPDIR="$ROOT/build/appimage/BunneyPOS.AppDir"
 OUT="$ROOT/dist/BunneyPOS-${VERSION}-${ARCH_LABEL}.AppImage"
 TOOL="${APPIMAGETOOL:-$ROOT/build/appimagetool-${ARCH_LABEL}.AppImage}"

@@ -48,8 +48,22 @@ VersionInfoVersion={#MyAppVersion}
 ; --- Password protection ---------------------------------------------------
 ; The installer will NOT proceed and will NOT extract any files until the
 ; correct password is entered. Encryption=yes is required for Password to work.
-; To change the password, edit the line below and recompile installer.iss.
-Password=REDACTED_SETUP_PASSWORD
+;
+; The password is NOT stored in this file. It is read at compile time from:
+;   1. The SETUP_PASSWORD environment variable, OR
+;   2. A .env file in the project root (SETUP_PASSWORD=...)
+;
+; build-windows.bat handles both automatically. To set your own password:
+;   - Windows: set SETUP_PASSWORD=your_password_here
+;   - Or create a .env file with: SETUP_PASSWORD=your_password_here
+;
+; If neither is set, the build will fail with a clear error.
+;
+; {#SetupPassword} is resolved at compile time by build-windows.bat, which
+; reads SETUP_PASSWORD from the environment or .env and passes it to ISCC
+; via /D. The value never appears in this file.
+#define SetupPassword GetEnv('SETUP_PASSWORD')
+Password={#SetupPassword}
 Encryption=yes
 
 ; Install into Program Files, which is what "standard desktop software" means
@@ -130,6 +144,59 @@ Type: filesandordirs; Name: "{app}\_internal"
 Type: dirifempty; Name: "{app}"
 
 [Code]
+{ -------------------------------------------------------------------------
+  Password resolution.
+
+  The installer password is read at compile time from:
+    1. The SETUP_PASSWORD environment variable, OR
+    2. A .env file in the project root (SETUP_PASSWORD=...)
+
+  build-windows.bat handles both. If neither is set, the build fails with
+  a clear error before Inno Setup is invoked.
+  ------------------------------------------------------------------------- }
+function GetSetupPassword(): String;
+var
+  EnvValue: String;
+  EnvFile: String;
+  Lines: TArrayOfString;
+  I: Integer;
+  Line: String;
+begin
+  { 1. Environment variable }
+  EnvValue := GetEnv('SETUP_PASSWORD');
+  if EnvValue <> '' then
+  begin
+    Result := EnvValue;
+    exit;
+  end;
+
+  { 2. .env file in the project root }
+  EnvFile := ExpandConstant('{src}\.env');
+  if FileExists(EnvFile) then
+  begin
+    if LoadStringsFromFile(EnvFile, Lines) then
+    begin
+      for I := 0 to GetArrayLength(Lines) - 1 do
+      begin
+        Line := Lines[I];
+        if Pos('SETUP_PASSWORD=', Line) = 1 then
+        begin
+          Result := Copy(Line, Length('SETUP_PASSWORD=') + 1, Length(Line));
+          { Trim whitespace }
+          while (Length(Result) > 0) and ((Result[1] = ' ') or (Result[1] = #9)) do
+            Result := Copy(Result, 2, Length(Result));
+          while (Length(Result) > 0) and ((Result[Length(Result)] = ' ') or (Result[Length(Result)] = #9)) do
+            Result := Copy(Result, 1, Length(Result) - 1);
+          exit;
+        end;
+      end;
+    end;
+  end;
+
+  { Neither found — return empty so the build fails with a clear error }
+  Result := '';
+end;
+
 { -------------------------------------------------------------------------
   On uninstall, ask whether to also delete the user's data.
 

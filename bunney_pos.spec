@@ -2,7 +2,7 @@
 """
 bunney_pos.spec — PyInstaller build spec for Bunney POS (Linux).
 
-Produces a self-contained bundle in dist/bunney-pos-linux/ containing the
+Produces a self-contained bundle in dist/linux/ containing the
 application, its Qt runtime, the SQLite schema and the UI assets. The target
 machine needs no Python and no virtual environment.
 

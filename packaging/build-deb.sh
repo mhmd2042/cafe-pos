@@ -25,7 +25,7 @@ cd "$ROOT"
 VERSION="$(sed -n 's/^VERSION = "\(.*\)"/\1/p' config.py | head -1)"
 ARCH="$(dpkg --print-architecture 2>/dev/null || echo amd64)"
 PKG="bunney-pos"
-BUNDLE="$ROOT/dist/bunney-pos-linux"
+BUNDLE="$ROOT/dist/linux"
 STAGE="$ROOT/build/deb/${PKG}_${VERSION}_${ARCH}"
 OUT="$ROOT/dist/${PKG}_${VERSION}_${ARCH}.deb"
 

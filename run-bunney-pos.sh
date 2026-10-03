@@ -2,7 +2,7 @@
 #
 # run-bunney-pos.sh — launch the packaged Bunney POS bundle (Linux).
 #
-# Works from the build folder (dist/bunney-pos-linux/) or after copying that
+# Works from the build folder (dist/linux/) or after copying that
 # whole folder anywhere, including a USB stick.
 #
 #   ./run-bunney-pos.sh

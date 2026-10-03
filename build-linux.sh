@@ -4,7 +4,7 @@
 #
 #   ./build-linux.sh
 #
-# Produces dist/bunney-pos-linux/ containing the application, the Qt runtime,
+# Produces dist/linux/ containing the application, the Qt runtime,
 # the SQLite schema and the UI assets. The target machine needs no Python.
 #
 # The result is NOT portable across different glibc versions: a build made on
@@ -34,12 +34,12 @@ echo "Building Bunney POS for Linux…"
 "$PY" -m PyInstaller --clean --noconfirm bunney_pos.spec
 
 # Ship the launcher inside the bundle so the folder is self-describing.
-cp -f run-bunney-pos.sh dist/bunney-pos-linux/
-chmod +x dist/bunney-pos-linux/run-bunney-pos.sh dist/bunney-pos-linux/bunney-pos
+cp -f run-bunney-pos.sh dist/linux/
+chmod +x dist/linux/run-bunney-pos.sh dist/linux/bunney-pos
 
 echo
-echo "Done: dist/bunney-pos-linux"
-du -sh dist/bunney-pos-linux
+echo "Done: dist/linux"
+du -sh dist/linux
 echo
 echo "Run it with:"
-echo "  ./dist/bunney-pos-linux/run-bunney-pos.sh"
+echo "  ./dist/linux/run-bunney-pos.sh"

@@ -160,10 +160,28 @@ build-windows.bat
 ```
 
 That creates the virtual environment, installs the dependencies, regenerates the
-icon, builds `dist\BunneyPOS.exe`, and — if Inno Setup is installed — also
-produces `dist\BunneyPOS_v1.0.0_Setup.exe`.
+icon, builds `dist\windows\BunneyPOS.exe`, and — if Inno Setup is installed —
+also produces `dist\windows\BunneyPOS_v1.0.0_Setup.exe`.
 
-To do it by hand instead:
+**Installer password:** The setup file is password-protected. The password is
+read at build time from the `SETUP_PASSWORD` environment variable or a `.env`
+file in the project root. It is never stored in `installer.iss` or the build
+script.
+
+To set it:
+
+```bat
+set SETUP_PASSWORD=your_password_here
+build-windows.bat
+```
+
+Or create a `.env` file in the project root:
+
+```
+SETUP_PASSWORD=your_password_here
+```
+
+To do the build by hand instead:
 
 ```powershell
 py -m venv .venv
@@ -176,12 +194,13 @@ The installer script is [Inno Setup](https://jrsoftware.org/isdl.php). Open
 `installer.iss` and press Compile, or from a terminal:
 
 ```powershell
-& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer.iss
+$env:SETUP_PASSWORD = "your_password_here"
+& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DSetupPassword="$env:SETUP_PASSWORD" installer.iss
 ```
 
-`dist\BunneyPOS_v1.0.0_Setup.exe` installs to `Program Files\Bunney POS`, adds a
-Start Menu entry and an optional desktop shortcut, and registers an uninstaller
-in Apps & Features.
+`dist\windows\BunneyPOS_v1.0.0_Setup.exe` installs to `Program Files\Bunney POS`,
+adds a Start Menu entry and an optional desktop shortcut, and registers an
+uninstaller in Apps & Features.
 
 ### Moving the project to Windows
 
@@ -202,13 +221,32 @@ Two things worth knowing:
 ### Building a Linux release
 
 ```bash
-./build-linux.sh            # frozen bundle in dist/bunney-pos-linux/
+./build-linux.sh            # frozen bundle in dist/linux/
 ./packaging/build-deb.sh    # .deb
 ./packaging/build-appimage.sh   # AppImage
 ```
 
 Build on the oldest distribution you intend to support — the bundle links
 against the build machine's glibc.
+
+### Output layout
+
+Windows and Linux builds write to separate directories so they never mix:
+
+```
+dist/
+├── linux/                  # Linux bundle (from build-linux.sh)
+│   ├── bunney-pos
+│   ├── run-bunney-pos.sh
+│   └── _internal/
+├── windows/                # Windows build (from build-windows.bat)
+│   ├── BunneyPOS.exe
+│   └── BunneyPOS_v1.0.0_Setup.exe
+├── bunney-pos_1.0.0_amd64.deb
+└── BunneyPOS-1.0.0-x86_64.AppImage
+```
+
+Copy only `dist\windows\` when deploying to a Windows café.
 
 ---
 

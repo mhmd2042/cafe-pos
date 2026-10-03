@@ -210,3 +210,7 @@ else:
         upx_exclude=[],
         name="BunneyPOS",
     )
+
+# Redirect output to dist/windows/ so Windows and Linux builds never mix.
+import PyInstaller.config
+PyInstaller.config.CONF['distpath'] = str(PROJECT_ROOT / "dist" / "windows")
