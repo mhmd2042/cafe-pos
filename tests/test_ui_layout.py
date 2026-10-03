@@ -75,6 +75,18 @@ def overflow_report(root: QWidget) -> list[str]:
         if in_scroll:
             continue
 
+        # Skip children of a Toast: the toast is an overlay whose label is
+        # intentionally larger than the toast frame until it is shown.
+        ancestor = parent
+        in_toast = False
+        while ancestor is not None:
+            if ancestor.objectName().startswith("Toast"):
+                in_toast = True
+                break
+            ancestor = ancestor.parentWidget()
+        if in_toast:
+            continue
+
         cg = child.geometry()
         pg = parent.rect()
         if (cg.right() > pg.right() + 2 or cg.bottom() > pg.bottom() + 2

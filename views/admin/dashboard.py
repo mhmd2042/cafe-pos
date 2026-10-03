@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QPushButton,
     QStackedWidget,
     QVBoxLayout,
@@ -60,6 +61,10 @@ class AdminDashboard(QWidget):
 
         self.setObjectName("AdminDashboard")
         self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+        # The dashboard needs enough height for the drawer's buttons plus the
+        # page header. Without this, a short window compresses the layout and
+        # the drawer card overflows its parent.
+        self.setMinimumHeight(600)
         self._build()
         self.show_page("reports")
 
@@ -76,10 +81,18 @@ class AdminDashboard(QWidget):
         panel = QFrame()
         panel.setObjectName("Card")
         panel.setFixedWidth(248)
+        # The drawer must never be squeezed below the height its buttons need.
+        # Without this, a short window compresses the layout and the nav buttons
+        # are painted on top of each other.
+        panel.setMinimumHeight(5 * config.MIN_TOUCH_TARGET + 200)
 
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(12, 14, 12, 14)
         layout.setSpacing(8)
+        # Prevent the layout from compressing its children below their minimum
+        # size. Without this, a short window squeezes the nav buttons together
+        # and they overlap.
+        layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
 
         title = QLabel("لوحة المدير")
         title.setObjectName("SectionTitle")
@@ -99,8 +112,11 @@ class AdminDashboard(QWidget):
         layout.addStretch(1)
         layout.addWidget(Divider())
 
-        self.toast = Toast()
-        layout.addWidget(self.toast)
+        # Toast is an overlay, not a layout item — a hidden QFrame still reserves
+        # its full size when it is in the layout, which was enough to push the
+        # panel past the window and clip the keypad underneath it.
+        self.toast = Toast(panel)
+        self.toast.hide()
 
         refresh = QPushButton("تحديث البيانات")
         refresh.setObjectName("GhostAction")
@@ -114,6 +130,21 @@ class AdminDashboard(QWidget):
         exit_button.clicked.connect(self.logout_requested.emit)
         layout.addWidget(exit_button)
         return panel
+
+    def resizeEvent(self, a0) -> None:  # noqa: N802 - Qt naming
+        """Keep the floating toast pinned across the bottom of the drawer."""
+        super().resizeEvent(a0)
+        if hasattr(self, "toast") and self.toast.parent() is not None:
+            parent = self.toast.parentWidget()
+            if parent is None:
+                return
+            margin = 16
+            height = max(self.toast.sizeHint().height(), 44)
+            self.toast.setGeometry(
+                margin, parent.height() - height - margin,
+                max(parent.width() - 2 * margin, 100), height,
+            )
+            self.toast.raise_()
 
     def _build_stack(self) -> QWidget:
         self.stack = QStackedWidget()
