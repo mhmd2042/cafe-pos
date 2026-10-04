@@ -29,7 +29,7 @@ jobs:
 
       - name: Build BunneyPOS.exe
         run: |
-          pyinstaller --clean --noconfirm windows_build.spec
+          pyinstaller --clean --noconfirm --distpath dist/windows windows_build.spec
 
       - name: Verify exe was produced
         run: |
