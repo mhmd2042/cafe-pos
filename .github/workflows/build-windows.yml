@@ -1,0 +1,92 @@
+name: Build Windows Installer
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Generate Windows icon
+        run: python tools\make_icons.py
+
+      - name: Build BunneyPOS.exe
+        run: |
+          pyinstaller --clean --noconfirm windows_build.spec
+
+      - name: Verify exe was produced
+        run: |
+          if (-not (Test-Path "dist\windows\BunneyPOS.exe")) {
+            Write-Error "BunneyPOS.exe was not produced"
+            exit 1
+          }
+
+      - name: Install Inno Setup 6
+        run: |
+          choco install innosetup --yes
+
+      - name: Build password-protected installer
+        env:
+          SETUP_PASSWORD: ${{ secrets.SETUP_PASSWORD }}
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            Write-Error "Inno Setup 6 not found at $iscc"
+            exit 1
+          }
+          & $iscc /DSetupPassword="$env:SETUP_PASSWORD" installer.iss
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Inno Setup failed with exit code $LASTEXITCODE"
+            exit 1
+          }
+
+      - name: Verify installer was produced
+        run: |
+          if (-not (Test-Path "dist\windows\BunneyPOS_v1.0.0_Setup.exe")) {
+            Write-Error "BunneyPOS_v1.0.0_Setup.exe was not produced"
+            exit 1
+          }
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: bunney-pos-windows
+          path: dist\windows\
+          retention-days: 30
+
+      - name: Create ZIP archive
+        run: |
+          Compress-Archive -Path "dist\windows\*" -DestinationPath "dist\bunney-pos-windows.zip" -Force
+
+      - name: Upload ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bunney-pos-windows-zip
+          path: dist\bunney-pos-windows.zip
+          retention-days: 30
+
+      - name: Create GitHub Release (on tag only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist\windows\BunneyPOS_v1.0.0_Setup.exe
+            dist\bunney-pos-windows.zip
+          generate_release_notes: true
