@@ -1,8 +1,8 @@
 ; ---------------------------------------------------------------------------
 ;  installer.iss — Inno Setup script for Bunney POS (Windows)
 ;
-;  Wraps dist\BunneyPOS.exe into a standard Windows installer:
-;    BunneyPOS_v1.0.0_Setup.exe
+;  Wraps dist\windows\BunneyPOS.exe into a standard Windows installer:
+;    dist\windows\BunneyPOS_v1.0.0_Setup.exe
 ;
 ;  What it does
 ;    * installs to            C:\Program Files\Bunney POS
@@ -20,7 +20,7 @@
 ;         "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
 ;       or open installer.iss in the Inno Setup IDE and press F9.
 ;
-;  Output: dist\BunneyPOS_v1.0.0_Setup.exe
+;  Output: dist\windows\BunneyPOS_v1.0.0_Setup.exe
 ;
 ;  IMPORTANT — where the data goes
 ;    The app writes its database, backups, receipts and logs to
@@ -74,7 +74,7 @@ DisableProgramGroupPage=yes
 AllowNoIcons=no
 
 ; Output
-OutputDir=dist
+OutputDir=dist\windows
 OutputBaseFilename=BunneyPOS_v{#MyAppVersion}_Setup
 Compression=lzma2/max
 SolidCompression=yes
@@ -114,7 +114,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; \
 
 [Files]
 ; The single-file exe built by windows_build.spec.
-Source: "dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "dist\windows\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 
 ; Icon and licence alongside it, so the user can find them.
 Source: "assets\icons\logo.ico"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
