@@ -110,7 +110,7 @@ if errorlevel 1 (
 REM --- build the exe ---------------------------------------------------------
 echo.
 echo Building BunneyPOS.exe (this takes a few minutes)...
-"%VPY%" -m PyInstaller --clean --noconfirm windows_build.spec
+"%VPY%" -m PyInstaller --clean --noconfirm --distpath "dist\windows" windows_build.spec
 if errorlevel 1 (
     echo ERROR: PyInstaller failed. See the output above.
     exit /b 1

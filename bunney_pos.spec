@@ -85,7 +85,10 @@ UNUSED_QT = (
     "Qt6RemoteObjects", "Qt6SerialPort", "Qt6SerialBus", "Qt6Bluetooth",
     "Qt6Test", "Qt6Sql", "Qt6NetworkAuth", "Qt6HttpServer",
     "Qt6OpenGLWidgets", "Qt6OpenGL", "Qt6EglFS", "Qt6Vulkan",
-    "Qt6WlShellIntegration", "Qt6WaylandCompositor",
+    # Qt6WlShellIntegration is NOT pruned: it provides the wl-shell compositor
+    # integration the Wayland plugin looks for at startup. Qt6WaylandCompositor
+    # (for *being* a compositor) is safe to drop.
+    "Qt6WaylandCompositor",
     "Qt6Scxml", "Qt6StateMachine", "Qt6VirtualKeyboard", "Qt6LabSettings",
     "Qt6HttpServer", "Qt6Network",
     # Media / codec stack pulled in by the multimedia plugins
@@ -102,8 +105,12 @@ UNUSED_PLUGIN_DIRS = (
     "sceneparsers", "geometryloaders", "assetimporters", "renderers",
     "renderplugins", "multimedia", "texttospeech", "sensors",
     "position", "networkinformation", "webview", "designer", "help",
-    "sqldrivers", "tls", "egldeviceintegrations", "wayland-graphics-integration",
-    "wayland-shell-integration", "wayland-decoration-client",
+    "sqldrivers", "tls", "egldeviceintegrations",
+    # NOTE: "wayland-shell-integration" and "wayland-decoration-client" are
+    # deliberately NOT pruned. They hold libxdg-shell.so, which is what actually
+    # creates a Wayland window; without it the app aborts at startup with
+    # "No shell integration named xdg-shell found" on every Wayland desktop.
+    # They look like optional compositor extras but are load-bearing here.
 )
 
 

@@ -29,11 +29,27 @@ fi
 # portable on a USB stick; the app creates it on first run.
 export BUNNEY_DATA_DIR="${BUNNEY_DATA_DIR:-$HERE}"
 
-# Prefer Wayland when the session offers it, otherwise fall back to X11.
-if [ -n "${WAYLAND_DISPLAY:-}" ]; then
-    export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-wayland;xcb}"
-else
-    export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-xcb}"
+# Pick a Qt platform plugin that will actually work on this machine.
+#
+# Qt 6.5+ needs libxcb-cursor0 for the X11 ("xcb") plugin. It is not installed
+# everywhere, and when it is missing Qt aborts with "no Qt platform plugin could
+# be initialized" — a confusing failure for a user who just wants the till to
+# open. A "wayland;xcb" fallback list does not help: Qt tries each in turn and
+# still aborts if the first one cannot initialise.
+#
+# So probe instead of guess: prefer Wayland when the session offers it, and only
+# fall back to X11 when its cursor library is actually present.
+if [ -z "${QT_QPA_PLATFORM:-}" ]; then
+    if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+        export QT_QPA_PLATFORM="wayland"
+    elif ldconfig -p 2>/dev/null | grep -q "libxcb-cursor\.so"; then
+        export QT_QPA_PLATFORM="xcb"
+    else
+        # Last resort: let Qt decide, and say why if it cannot.
+        echo "Bunney POS: no Wayland session and libxcb-cursor0 is missing." >&2
+        echo "  Install it for X11 support:  sudo apt install libxcb-cursor0" >&2
+        echo "  Or force a backend:          QT_QPA_PLATFORM=wayland ./run-bunney-pos.sh" >&2
+    fi
 fi
 
 # Qt needs a UTF-8 locale to shape Arabic correctly. If the user's environment
