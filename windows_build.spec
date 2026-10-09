@@ -3,8 +3,8 @@
 windows_build.spec — PyInstaller build spec for Bunney POS (Windows).
 
 Run this on a Windows machine; PyInstaller cannot cross-compile, so a Linux box
-cannot produce a .exe. The result is dist\\BunneyPOS.exe — a single file with no
-console window and no Python installation required on the target PC.
+cannot produce a .exe. The result is dist\\windows\\BunneyPOS.exe — a single file
+with no console window and no Python installation required on the target PC.
 
 Two-step build on Windows (PowerShell or cmd), from the project root:
 
@@ -23,6 +23,8 @@ Design notes
   folder — otherwise the data would vanish on exit. When the exe sits in
   Program Files (i.e. installed), config detects that the directory is not
   writable and falls back to %LOCALAPPDATA%\\bunney-pos automatically.
+* Output goes to dist\\windows\\ (set on the command line with --distpath, which
+  build-windows.bat and the CI workflow both pass).
 * console=False: no black terminal window behind the POS.
 * The icon is a real multi-size .ico, committed to the repo, so a fresh clone
   builds correctly without running any icon-generation step first. Regenerate it
@@ -34,7 +36,7 @@ PyInstaller's PyQt6 hook collects every Qt library in the wheel, and the
 `excludes` option does NOT filter them (it only affects Python imports). The app
 uses QtCore, QtGui, QtWidgets and QtSvg, so the rest is removed from the
 collected file list below. This takes the bundle from roughly 300 MB to about
-half that. The same pruning is applied in bunney_pos.spec (Linux).
+half that.
 """
 
 from pathlib import Path
@@ -112,8 +114,7 @@ a = Analysis(
 )
 
 # --- Qt pruning ------------------------------------------------------------ #
-# Matched against the file NAME of every collected binary/DLL. Windows Qt files
-# are named like Qt6Quick.dll, so the same substrings work as on Linux.
+# Matched against the file NAME of every collected binary/DLL.
 UNUSED_QT = (
     "Qt6Quick", "Qt6Qml", "Qt6WebEngine", "Qt6WebChannel", "Qt6WebSockets",
     "Qt6Multimedia", "Qt6SpatialAudio", "Qt6TextToSpeech", "Qt6Concurrent",

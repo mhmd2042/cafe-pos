@@ -1,9 +1,9 @@
 # Bunney POS
 
 A local, offline desktop point-of-sale and accounting app for a small café.
-Python 3, PyQt6 and SQLite. It runs on Windows and Linux, needs no internet
-connection, and keeps everything on the machine it's installed on — no cloud, no
-API server, no telemetry.
+Python 3, PyQt6 and SQLite, built and distributed for Windows. It needs no
+internet connection, and keeps everything on the machine it's installed on — no
+cloud, no API server, no telemetry.
 
 The interface is Arabic and right-to-left, since that's who it was built for.
 Prices are stored as integers in minor units and are tax-inclusive, so what's on
@@ -59,26 +59,25 @@ that always reconciles against on-hand quantities.
 
 ## How to Run
 
+The development environment is Linux, but the app is built for Windows. Use the
+project's virtual environment to run it locally.
+
 Needs Python 3.11 or newer.
 
-```bash
+```powershell
 # 1. Create a virtual environment
-python -m venv .venv
+py -m venv .venv
 
 # 2. Activate it, then install the dependencies
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
+.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 
 # 3. Run it
 python main.py
 ```
 
-There's also a small launcher that handles the above and picks the right Qt
-platform for your session:
-
-```bash
-./run.sh
-```
+On Linux, the same steps work with `python3`, `source .venv/bin/activate`, and the
+`./run.sh` launcher (which picks the right Qt platform for your session).
 
 On first launch the app creates its database and seeds a starter menu — a handful
 of categories, drinks, modifiers, ingredients and recipes. It also creates one
@@ -108,10 +107,10 @@ checked without a display — useful if you're changing styles or layout.
 
 ---
 
-## Packaging & Installation
+## Windows Installer
 
-The app runs on Windows and Linux from a single frozen build, so the target
-machine needs no Python and no virtual environment.
+The app ships as a single frozen build, so the target machine needs no Python and
+no virtual environment.
 
 ### Where your data lives
 
@@ -119,36 +118,15 @@ Worth knowing before you install, because it decides what a reinstall touches:
 
 | Mode | Database, backups, logs |
 | --- | --- |
-| Run from a portable folder | Beside the executable |
-| Installed (`.deb`, AppImage, Windows setup) | `~/.local/share/bunney-pos/` on Linux, `%LOCALAPPDATA%\bunney-pos` on Windows |
+| Run from a portable folder (`dist\windows`) | Beside the executable |
+| Installed (Windows setup) | `%LOCALAPPDATA%\bunney-pos` |
 
-An installed copy lives somewhere the user cannot write, so it keeps its data in
-your home directory instead. That is why uninstalling never deletes a cafe's
-sales history — the data isn't in the install directory. Delete the folder above
-by hand if you really want it gone.
+An installed copy lives in `Program Files`, which the user cannot write to, so it
+keeps their data in their home directory instead. That is why uninstalling never
+deletes a café's sales history — the data isn't in the install directory. The
+uninstaller asks before removing it.
 
-Override either with `BUNNEY_DATA_DIR` if you need to.
-
-### Linux — Debian/Ubuntu package
-
-```bash
-./packaging/build-deb.sh
-sudo apt install ./dist/bunney-pos_1.0.0_amd64.deb
-```
-
-Adds a menu entry and a desktop icon, and installs to `/opt/bunney-pos`. Remove
-it with `sudo apt remove bunney-pos`.
-
-### Linux — AppImage (any distro)
-
-```bash
-./packaging/build-appimage.sh
-chmod +x dist/BunneyPOS-1.0.0-x86_64.AppImage
-./dist/BunneyPOS-1.0.0-x86_64.AppImage
-```
-
-One file, no install, no root. Handy for trying it on a machine before
-committing to an install.
+Override with `BUNNEY_DATA_DIR` if you need to.
 
 ### Windows — one command
 
@@ -218,35 +196,13 @@ Two things worth knowing:
   `assets/database/bunney_pos.db` into the data directory (see the table above)
   while the app is closed.
 
-### Building a Linux release
-
-```bash
-./build-linux.sh            # frozen bundle in dist/linux/
-./packaging/build-deb.sh    # .deb
-./packaging/build-appimage.sh   # AppImage
-```
-
-Build on the oldest distribution you intend to support — the bundle links
-against the build machine's glibc.
-
 ### Output layout
 
-Windows and Linux builds write to separate directories so they never mix:
-
 ```
-dist/
-├── linux/                  # Linux bundle (from build-linux.sh)
-│   ├── bunney-pos
-│   ├── run-bunney-pos.sh
-│   └── _internal/
-├── windows/                # Windows build (from build-windows.bat)
-│   ├── BunneyPOS.exe
-│   └── BunneyPOS_v1.0.0_Setup.exe
-├── bunney-pos_1.0.0_amd64.deb
-└── BunneyPOS-1.0.0-x86_64.AppImage
+dist\windows\
+├── BunneyPOS.exe                  portable: copy to any PC and run
+└── BunneyPOS_v1.0.0_Setup.exe    password-protected installer
 ```
-
-Copy only `dist\windows\` when deploying to a Windows café.
 
 ---
 
@@ -266,12 +222,10 @@ bunney_pos/
 ├── controllers/       auth, POS, shifts, backups, admin — Qt-free
 ├── views/             PyQt6 UI (login, cashier, admin)
 ├── services/          ESC/POS printing, report export
-├── tests/             four test suites plus render scripts
-├── packaging/         .deb and AppImage builders, .desktop entry
-├── assets/            stylesheets, icons, local database
-├── bunney_pos.spec    PyInstaller spec (Linux)
-├── windows_build.spec PyInstaller spec (Windows)
-└── installer.iss      Inno Setup script (Windows installer)
+├── tests/               test suites plus render scripts
+├── assets/              stylesheets, icons, local database
+├── windows_build.spec   PyInstaller spec (Windows)
+└── installer.iss        Inno Setup script (Windows installer)
 ```
 
 ---
