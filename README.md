@@ -223,8 +223,10 @@ bunney_pos/
 ├── views/             PyQt6 UI (login, cashier, admin)
 ├── services/          ESC/POS printing, report export
 ├── tests/               test suites plus render scripts
+├── packaging/           .deb and AppImage builders (Linux), version_info.txt
 ├── assets/              stylesheets, icons, local database
 ├── windows_build.spec   PyInstaller spec (Windows)
+├── bunney_pos.spec      PyInstaller spec (Linux)
 └── installer.iss        Inno Setup script (Windows installer)
 ```
 

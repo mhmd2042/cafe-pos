@@ -36,8 +36,9 @@ build/
 dist/
 *.manifest
 *.spec.bak
-# Keep the spec itself — it is source.
+# Keep the specs themselves — they are source.
 !windows_build.spec
+!bunney_pos.spec
 
 # --- Virtual environments -------------------------------------------------
 .venv/
