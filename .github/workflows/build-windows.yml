@@ -51,7 +51,10 @@ jobs:
             Write-Error "Inno Setup 6 not found at $iscc"
             exit 1
           }
-          & $iscc /DSetupPassword="$env:SETUP_PASSWORD" installer.iss
+          # installer.iss reads SETUP_PASSWORD from the environment via
+          # GetEnv('SETUP_PASSWORD'); passing it on the command line would
+          # expose it in the process list and the runner log.
+          & $iscc installer.iss
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Inno Setup failed with exit code $LASTEXITCODE"
             exit 1

@@ -99,3 +99,6 @@ config_local.py
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Local screenshot captures (generated, not source)
+screenshots/

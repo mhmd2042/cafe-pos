@@ -10,14 +10,14 @@ REM  It creates the virtual environment, installs the dependencies, regenerates
 REM  the icon, builds dist\windows\BunneyPOS.exe, and — if Inno Setup is
 REM  installed — also produces dist\windows\BunneyPOS_v1.0.0_Setup.exe.
 REM
-REM  Requires Python 3.11+ on PATH as `py` or `python'.
+REM  Requires Python 3.11+ on PATH as `py` or `python`.
 REM
 REM  PASSWORD: The installer password is read from the SETUP_PASSWORD
 REM  environment variable or a .env file in the project root. It is never
 REM  stored in this script or in installer.iss.
 REM ---------------------------------------------------------------------------
 
-setlocal EnableDelayedExpansion
+setlocal
 cd /d "%~dp0"
 
 echo ============================================================
@@ -43,8 +43,8 @@ echo.
 
 REM --- resolve the installer password ---------------------------------------
 REM  Priority: 1) SETUP_PASSWORD env var  2) .env file in project root
-set SETUP_PASSWORD=
-if not "%SETUP_PASSWORD%"=="" goto :password_ok
+REM  Never echo the value: this console may be captured in a build log.
+if defined SETUP_PASSWORD goto :password_ok
 
 if exist ".env" (
     for /f "usebackq tokens=1,* delims==" %%a in (".env") do (
@@ -67,7 +67,7 @@ echo   The password is never stored in installer.iss or this script.
 exit /b 1
 
 :password_ok
-echo Installer password: resolved from %SETUP_PASSWORD%...
+echo Installer password: resolved. (value not shown)
 echo.
 
 REM --- virtual environment ---------------------------------------------------
@@ -135,7 +135,10 @@ if "%ISCC%"=="" (
     echo to also produce dist\windows\BunneyPOS_v1.0.0_Setup.exe
 ) else (
     echo Compiling the installer with Inno Setup...
-    "%ISCC%" /DSetupPassword="%SETUP_PASSWORD%" installer.iss
+    REM installer.iss reads SETUP_PASSWORD from the environment via
+    REM GetEnv('SETUP_PASSWORD'); passing it on the command line would
+    REM expose it in the process list.
+    "%ISCC%" installer.iss
     if errorlevel 1 (
         echo WARNING: Inno Setup reported an error; see the output above.
     ) else (
