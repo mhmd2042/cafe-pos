@@ -6,6 +6,12 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
+# The release step needs to create a release and upload assets. The repository
+# default for GITHUB_TOKEN is read-only, so the write scope is requested here
+# rather than widened repository-wide.
+permissions:
+  contents: write
+
 jobs:
   build-windows:
     runs-on: windows-latest
