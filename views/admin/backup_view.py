@@ -60,9 +60,23 @@ class BackupView(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(12)
 
-        root.addWidget(self._build_target_card())
-        root.addWidget(self._build_status_card())
-        root.addWidget(self._build_history_card(), 1)
+        # Wrap everything in a scroll area for small screens
+        from PyQt6.QtWidgets import QScrollArea
+        container = QWidget()
+        container_layout = QVBoxLayout(container)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+        container_layout.setSpacing(12)
+
+        container_layout.addWidget(self._build_target_card())
+        container_layout.addWidget(self._build_status_card())
+        container_layout.addWidget(self._build_history_card(), 1)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidget(container)
+
+        root.addWidget(scroll)
 
         self.toast = Toast()
         root.addWidget(self.toast)
@@ -87,68 +101,71 @@ class BackupView(QWidget):
         layout.addWidget(hint)
         layout.addWidget(Divider())
 
-        row = QHBoxLayout()
-        row.setSpacing(8)
+        # Path row: use QGridLayout so it wraps on narrow screens
+        path_grid = QGridLayout()
+        path_grid.setSpacing(8)
+        path_grid.setColumnStretch(0, 1)
 
         self.path_edit = QLineEdit()
-        # Show a plausible example for the platform the app is actually running
-        # on — an admin on Windows should not be told to look for /media/usb.
         self.path_edit.setPlaceholderText(
             r"E:\Cafe_Backups" if config.IS_WINDOWS else "/media/usb/Cafe_Backups"
         )
         self.path_edit.setMinimumHeight(config.MIN_TOUCH_TARGET - 8)
         self.path_edit.textChanged.connect(lambda: self._update_target_state())
-        row.addWidget(self.path_edit, 1)
+        path_grid.addWidget(self.path_edit, 0, 0, 1, 3)
 
         browse = QPushButton("استعراض…")
         browse.setObjectName("GhostAction")
         browse.setMinimumHeight(config.MIN_TOUCH_TARGET)
         browse.clicked.connect(self._browse)
-        row.addWidget(browse)
+        path_grid.addWidget(browse, 1, 0)
 
         save = QPushButton("حفظ المسار")
         save.setObjectName("PrimaryAction")
         save.setMinimumHeight(config.MIN_TOUCH_TARGET)
         save.clicked.connect(self._save_target)
-        row.addWidget(save)
-        layout.addLayout(row)
+        path_grid.addWidget(save, 1, 1)
+        layout.addLayout(path_grid)
 
-        # Detected drives: a real mount point beats a typed path.
-        detect_row = QHBoxLayout()
-        detect_row.setSpacing(8)
+        # Detected drives: QGridLayout for wrapping
+        detect_grid = QGridLayout()
+        detect_grid.setSpacing(8)
+        detect_grid.setColumnStretch(1, 1)
+
+        detect_grid.addWidget(QLabel("الأقراص المكتشفة:"), 0, 0)
         self.drive_combo = QComboBox()
         self.drive_combo.setMinimumHeight(config.MIN_TOUCH_TARGET - 8)
-        self.drive_combo.setMinimumWidth(340)
-        detect_row.addWidget(QLabel("الأقراص المكتشفة:"))
-        detect_row.addWidget(self.drive_combo, 1)
+        detect_grid.addWidget(self.drive_combo, 0, 1)
 
         use_drive = QPushButton("استخدام القرص المحدد")
         use_drive.setObjectName("GhostAction")
         use_drive.setMinimumHeight(config.MIN_TOUCH_TARGET)
         use_drive.clicked.connect(self._use_detected_drive)
-        detect_row.addWidget(use_drive)
+        detect_grid.addWidget(use_drive, 1, 0)
 
         rescan = QPushButton("إعادة الفحص")
         rescan.setObjectName("GhostAction")
         rescan.setMinimumHeight(config.MIN_TOUCH_TARGET)
         rescan.clicked.connect(self._scan_drives)
-        detect_row.addWidget(rescan)
-        layout.addLayout(detect_row)
+        detect_grid.addWidget(rescan, 1, 1)
+        layout.addLayout(detect_grid)
 
-        options = QHBoxLayout()
-        options.setSpacing(12)
+        # Options: QGridLayout for wrapping
+        options_grid = QGridLayout()
+        options_grid.setSpacing(12)
+        options_grid.setColumnStretch(1, 1)
+
         self.auto_check = QCheckBox("نسخة تلقائية عند إغلاق الوردية")
         self.auto_check.stateChanged.connect(self._save_options)
-        options.addWidget(self.auto_check)
+        options_grid.addWidget(self.auto_check, 0, 0)
 
-        options.addWidget(QLabel("عدد النسخ المحلية المحفوظة:"))
+        options_grid.addWidget(QLabel("عدد النسخ المحلية المحفوظة:"), 0, 1)
         self.keep_spin = QSpinBox()
         self.keep_spin.setRange(1, 365)
         self.keep_spin.setMinimumHeight(config.MIN_TOUCH_TARGET - 12)
         self.keep_spin.valueChanged.connect(self._save_options)
-        options.addWidget(self.keep_spin)
-        options.addStretch(1)
-        layout.addLayout(options)
+        options_grid.addWidget(self.keep_spin, 0, 2)
+        layout.addLayout(options_grid)
         return card
 
     def _build_status_card(self) -> QWidget:
@@ -174,17 +191,11 @@ class BackupView(QWidget):
         backup_now.clicked.connect(self._backup_now)
         layout.addWidget(backup_now, 2, 0)
 
-        test_printer = QPushButton("اختبار الطابعة")
-        test_printer.setObjectName("GhostAction")
-        test_printer.setMinimumHeight(config.MIN_TOUCH_TARGET)
-        test_printer.clicked.connect(self._test_printer)
-        layout.addWidget(test_printer, 2, 1)
-
         open_folder = QPushButton("فتح مجلد النسخ المحلي")
         open_folder.setObjectName("GhostAction")
         open_folder.setMinimumHeight(config.MIN_TOUCH_TARGET)
         open_folder.clicked.connect(self._open_local_folder)
-        layout.addWidget(open_folder, 2, 2)
+        layout.addWidget(open_folder, 2, 1)
         return card
 
     def _build_history_card(self) -> QWidget:

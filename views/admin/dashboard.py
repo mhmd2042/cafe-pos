@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLayout,
     QPushButton,
+    QScrollArea,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
