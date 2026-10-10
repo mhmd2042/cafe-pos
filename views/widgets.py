@@ -13,11 +13,106 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLayout,
+    QScrollArea,
     QSizePolicy,
     QWidget,
 )
 
-__all__ = ["Toast", "FlowLayout", "Divider", "QuantityStepper"]
+__all__ = ["Toast", "FlowLayout", "Divider", "QuantityStepper", "ResponsivePanel",
+           "make_scroll"]
+
+
+def make_scroll(body: QWidget) -> QScrollArea:
+    """
+    Wrap `body` in a chrome-free vertical scroll area that does not dictate the
+    width of whatever contains it.
+
+    A plain QScrollArea reports a minimum width taken from its content, which
+    then propagates up through every layout above it: a 213px-wide editor pane
+    ended up demanding 284px once the scrollbar and the content's own minimum
+    were counted, and the pane was painted outside its parent.
+
+    QScrollArea does not offer a switch for this — `setMinimumWidth(0)` is
+    ignored because the viewport still propagates the widget's hint — so the
+    hint itself is overridden here. Height is left alone: the vertical hint is
+    what makes the surrounding column scroll.
+    """
+    scroll = _WidthAgnosticScrollArea()
+    scroll.setWidgetResizable(True)
+    scroll.setFrameShape(QFrame.Shape.NoFrame)
+    scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    scroll.setWidget(body)
+    return scroll
+
+
+class _WidthAgnosticScrollArea(QScrollArea):
+    """A QScrollArea whose width never depends on its content."""
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802 - Qt naming
+        hint = super().minimumSizeHint()
+        return QSize(0, hint.height())
+
+    def sizeHint(self) -> QSize:  # noqa: N802 - Qt naming
+        hint = super().sizeHint()
+        return QSize(0, hint.height())
+
+
+class ResponsivePanel(QFrame):
+    """
+    A side panel that keeps its intended width but gives space back when the
+    window is too narrow to hold it.
+
+    A plain setFixedWidth makes the whole row refuse to shrink: on a small or
+    high-DPI screen the neighbouring content is squeezed to nothing and the
+    widgets overlap. This panel instead reports its intended width as the size
+    hint and its floor as the minimum, so Qt gives it `preferred_width` when
+    there is room and shrinks it towards `min_width` when there is not. It is
+    never pinned to one width, which is what let children paint outside it.
+
+    Used by the POS rail/cart, the admin drawer and the menu/inventory columns.
+    """
+
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        *,
+        preferred_width: int,
+        min_width: int,
+        width_share: float,
+        floor_height: int = 0,
+    ) -> None:
+        super().__init__(parent)
+        self._preferred = preferred_width
+        self._min = min_width
+        self._share = width_share
+        # The minimum stays at zero on purpose. Qt never shrinks a widget below
+        # its minimumWidth, so a floor here would make the panel wider than a
+        # parent that cannot hold it — the exact overflow this class exists to
+        # prevent. `min_width` is honoured through the size hint below instead:
+        # Qt prefers the hint, so the panel only goes below it when the row
+        # genuinely has no room, and the panel's scroll area carries the rest.
+        self.setMinimumWidth(0)
+        self.setMaximumWidth(preferred_width)
+        if floor_height:
+            self.setMinimumHeight(floor_height)
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+
+    def sizeHint(self) -> QSize:  # noqa: N802 - Qt naming
+        """The width the panel wants: its share of the window, clamped."""
+        parent = self.parentWidget()
+        if parent is None or parent.width() <= 0:
+            return QSize(self._preferred, super().sizeHint().height())
+        target = int(parent.width() * self._share)
+        target = max(self._min, min(self._preferred, target))
+        return QSize(target, super().sizeHint().height())
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802 - Qt naming
+        """Never demand more width than the parent has."""
+        parent = self.parentWidget()
+        height = super().minimumSizeHint().height()
+        if parent is None or parent.width() <= 0:
+            return QSize(self._min, height)
+        return QSize(min(self._min, parent.width()), height)
 
 
 class Toast(QFrame):

@@ -162,24 +162,17 @@ def main() -> int:
               smallest >= config.MIN_TOUCH_TARGET,
               f"smallest key {smallest}px")
 
-        # The pad must be reachable without being clipped. Below the spec's
-        # 720px minimum window height the panel scrolls, which is acceptable;
-        # what must never happen is the pad being squeezed into overlapping
-        # rows (checked above) or pushed somewhere unreachable.
+        # The pad must be reachable without being clipped. When the panel cannot
+        # fit it, it must scroll — either is fine, but the pad must never be
+        # squeezed into overlapping rows (checked above) or unreachable.
         top_left = pad.mapTo(login, pad.rect().topLeft())
         bottom = top_left.y() + pad.height()
-        if height >= config.WINDOW_MIN_HEIGHT:
-            check(f"{width}x{height}: keypad fits inside the window",
-                  bottom <= login.height() + 2,
-                  f"keypad bottom {bottom}px vs window {login.height()}px")
-        else:
-            scroll = login.findChild(QScrollArea, "LoginScroll")
-            scrollable = bool(scroll and
-                              scroll.verticalScrollBar().maximum() > 0)
-            check(f"{width}x{height}: keypad reachable by scrolling",
-                  scrollable or bottom <= login.height() + 2,
-                  "below the spec minimum; panel scrolls" if scrollable
-                  else f"keypad bottom {bottom}px, window {login.height()}px")
+        scroll = login.findChild(QScrollArea, "LoginScroll")
+        scrollable = bool(scroll and scroll.verticalScrollBar().maximum() > 0)
+        check(f"{width}x{height}: keypad fits or is reachable by scrolling",
+              bottom <= login.height() + 2 or scrollable,
+              f"keypad bottom {bottom}px vs window {login.height()}px"
+              + (", panel scrolls" if scrollable else ", and the panel does not scroll"))
 
     # --------------------------------------------------------- main window --
     print("\n-- main window: every screen --")

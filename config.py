@@ -198,8 +198,16 @@ LAYOUT_DIRECTION = "rtl"          # native Arabic right-to-left layout
 MIN_TOUCH_TARGET = 60             # px — spec: minimum 60x60 touch area
 PRODUCT_TILE_MIN_WIDTH = 150
 PRODUCT_TILE_MIN_HEIGHT = 96
-WINDOW_MIN_WIDTH = 1180
-WINDOW_MIN_HEIGHT = 720
+
+# The window floor is deliberately small. Qt6 is per-monitor DPI aware, so a
+# 1366x768 laptop at Windows' default 125% scaling gives the app only about
+# 1092x582 logical px, and at 150% about 910x485. A floor above that makes
+# Windows keep the window larger than the screen, and the layout then paints
+# widgets on top of each other. Every screen scrolls vertically, so a small
+# height floor is safe; the width floor is the narrowest row that still shows
+# usable content (POS = rail 215 + a product tile 176 + cart 275 + margins).
+WINDOW_MIN_WIDTH = 900
+WINDOW_MIN_HEIGHT = 480
 STARTUP_BUDGET_MS = 3000          # spec: cold start under 3 seconds
 
 # Arabic-first font stack with sane cross-platform fallbacks.
@@ -263,6 +271,24 @@ THEME_LIGHT = {
 
 ACTIVE_THEME = "dark"
 
+# Admin side panels: preferred width plus the floor they may shrink to. Same
+# reasoning as the POS panels above. Each floor is the widest button or label the
+# panel holds, plus its margins — measured, not guessed: a floor below the real
+# content minimum lets the panel shrink and the content then paints outside it.
+ADMIN_DRAWER_WIDTH = 248
+ADMIN_DRAWER_MIN_WIDTH = 195
+MENU_RAIL_WIDTH = 230
+MENU_RAIL_MIN_WIDTH = 215
+MENU_EDITOR_WIDTH = 330
+# The floor covers the pane's own content (213px measured) plus room for the
+# vertical scrollbar the panel always shows when it is short.
+MENU_EDITOR_MIN_WIDTH = 250
+# The product table between the rail and the editor: the only stretchy pane, so
+# it needs an explicit floor or it collapses before the fixed ones do.
+MENU_PRODUCTS_MIN_WIDTH = 420
+INVENTORY_PICKER_WIDTH = 300
+INVENTORY_PICKER_MIN_WIDTH = 205
+
 # --------------------------------------------------------------------------- #
 # Runtime behaviour
 # --------------------------------------------------------------------------- #
@@ -291,9 +317,20 @@ PRINTER_CONNECT_TIMEOUT_S = 4
 # start — the category rail — on the RIGHT and the cart on the LEFT. Set this to
 # False to force the literal LTR placement.
 POS_LAYOUT_MIRROR_RTL = True
+# Preferred width on a normal screen, and the floor the panel may shrink to
+# when the window is narrow. A hard setFixedWidth makes the whole row refuse to
+# shrink, so on a small or high-DPI screen the product grid is squeezed to
+# nothing; POS keeps the intended width when there is room and gives space back
+# when there is not.
 CATEGORY_RAIL_WIDTH = 236
+CATEGORY_RAIL_MIN_WIDTH = 215
 CART_PANEL_WIDTH = 452
+CART_PANEL_MIN_WIDTH = 275
 PRODUCT_GRID_SPACING = 12
+# Side panels take this share of the window, clamped to the floors above.
+# Chosen so two product tiles always fit between them at the window minimum.
+CATEGORY_RAIL_WINDOW_SHARE = 0.17
+CART_PANEL_WINDOW_SHARE = 0.33
 # Quick-tender buttons in the cash dialog (whole rials).
 QUICK_CASH_AMOUNTS = (500, 1000, 2000, 5000, 10000)
 CART_MERGE_IDENTICAL_LINES = True   # tapping the same drink twice bumps quantity

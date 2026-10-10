@@ -36,7 +36,7 @@ from PyQt6.QtWidgets import (
 import config
 from controllers.admin_controller import AdminController, MenuError
 from models.inventory import InventoryError, InventoryRepository
-from views.widgets import Divider, Toast
+from views.widgets import Divider, ResponsivePanel, Toast
 
 logger = logging.getLogger(__name__)
 
@@ -286,9 +286,12 @@ class InventoryView(QWidget):
         layout.setSpacing(12)
 
         # product picker
-        left = QFrame()
+        left = ResponsivePanel(
+            preferred_width=config.INVENTORY_PICKER_WIDTH,
+            min_width=config.INVENTORY_PICKER_MIN_WIDTH,
+            width_share=0.28,
+        )
         left.setObjectName("Card")
-        left.setFixedWidth(300)
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(12, 12, 12, 12)
         left_layout.setSpacing(8)

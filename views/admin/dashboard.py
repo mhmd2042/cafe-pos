@@ -16,7 +16,6 @@ from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
-    QLayout,
     QPushButton,
     QScrollArea,
     QStackedWidget,
@@ -30,7 +29,7 @@ from views.admin.backup_view import BackupView
 from views.admin.inventory_view import InventoryView
 from views.admin.menu_editor import MenuEditorView
 from views.admin.reports_view import ReportsView
-from views.widgets import Divider, Toast
+from views.widgets import Divider, ResponsivePanel, Toast, make_scroll
 
 logger = logging.getLogger(__name__)
 
@@ -62,10 +61,6 @@ class AdminDashboard(QWidget):
 
         self.setObjectName("AdminDashboard")
         self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
-        # The dashboard needs enough height for the drawer's buttons plus the
-        # page header. Without this, a short window compresses the layout and
-        # the drawer card overflows its parent.
-        self.setMinimumHeight(600)
         self._build()
         self.show_page("reports")
 
@@ -79,21 +74,31 @@ class AdminDashboard(QWidget):
         root.addWidget(self._build_stack(), 1)
 
     def _build_drawer(self) -> QWidget:
-        panel = QFrame()
+        panel = ResponsivePanel(
+            preferred_width=config.ADMIN_DRAWER_WIDTH,
+            min_width=config.ADMIN_DRAWER_MIN_WIDTH,
+            width_share=0.19,
+        )
         panel.setObjectName("Card")
-        panel.setFixedWidth(248)
-        # The drawer must never be squeezed below the height its buttons need.
-        # Without this, a short window compresses the layout and the nav buttons
-        # are painted on top of each other.
-        panel.setMinimumHeight(5 * config.MIN_TOUCH_TARGET + 200)
 
-        layout = QVBoxLayout(panel)
+        # The nav list lives in a scroll area instead of forcing a tall minimum
+        # height. The previous floor (5*60+200 = 500px) made the whole dashboard
+        # refuse to shrink below it, so on a 1366x768 laptop at 125% scaling the
+        # window was taller than the screen and the buttons overlapped. Scrolling
+        # removes the floor while keeping every button reachable.
+        outer = QVBoxLayout(panel)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        body = QWidget()
+        layout = QVBoxLayout(body)
         layout.setContentsMargins(12, 14, 12, 14)
         layout.setSpacing(8)
-        # Prevent the layout from compressing its children below their minimum
-        # size. Without this, a short window squeezes the nav buttons together
-        # and they overlap.
-        layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
 
         title = QLabel("لوحة المدير")
         title.setObjectName("SectionTitle")
@@ -110,14 +115,7 @@ class AdminDashboard(QWidget):
             layout.addWidget(button)
             self._buttons[key] = button
 
-        layout.addStretch(1)
         layout.addWidget(Divider())
-
-        # Toast is an overlay, not a layout item — a hidden QFrame still reserves
-        # its full size when it is in the layout, which was enough to push the
-        # panel past the window and clip the keypad underneath it.
-        self.toast = Toast(panel)
-        self.toast.hide()
 
         refresh = QPushButton("تحديث البيانات")
         refresh.setObjectName("GhostAction")
@@ -130,6 +128,16 @@ class AdminDashboard(QWidget):
         exit_button.setMinimumHeight(config.MIN_TOUCH_TARGET)
         exit_button.clicked.connect(self.logout_requested.emit)
         layout.addWidget(exit_button)
+
+        layout.addStretch(1)
+        scroll = make_scroll(body)
+        outer.addWidget(scroll)
+
+        # Toast is an overlay, not a layout item — a hidden QFrame still reserves
+        # its full size when it is in the layout, which was enough to push the
+        # panel past the window and clip the keypad underneath it.
+        self.toast = Toast(panel)
+        self.toast.hide()
         return panel
 
     def resizeEvent(self, a0) -> None:  # noqa: N802 - Qt naming

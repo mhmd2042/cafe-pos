@@ -105,14 +105,18 @@ class ReportsView(QWidget):
     def _build_toolbar(self) -> QWidget:
         bar = QFrame()
         bar.setObjectName("Card")
-        layout = QHBoxLayout(bar)
+        # Seven controls in one QHBoxLayout forced a 950px minimum on the whole
+        # reports page. A QGridLayout lets them wrap onto a second row when the
+        # window is narrow, so the page follows the window instead of the other
+        # way round.
+        layout = QGridLayout(bar)
         layout.setContentsMargins(14, 12, 14, 12)
         layout.setSpacing(10)
 
         title = QLabel("التقارير والتحليلات")
         title.setObjectName("SectionTitle")
-        layout.addWidget(title)
-        layout.addStretch(1)
+        layout.addWidget(title, 0, 0, 1, 3)
+        layout.setColumnStretch(2, 1)
 
         self.period_combo = QComboBox()
         self.period_combo.addItem("اليوم", "today")
@@ -122,34 +126,34 @@ class ReportsView(QWidget):
         self.period_combo.addItem("فترة مخصصة", "custom")
         self.period_combo.setMinimumHeight(config.MIN_TOUCH_TARGET - 8)
         self.period_combo.currentIndexChanged.connect(self._on_period_changed)
-        layout.addWidget(self.period_combo)
+        layout.addWidget(self.period_combo, 1, 0)
 
         self.from_edit = QDateEdit(QDate.currentDate().addDays(-7))
         self.to_edit = QDateEdit(QDate.currentDate())
-        for editor in (self.from_edit, self.to_edit):
+        for column, editor in enumerate((self.from_edit, self.to_edit), start=1):
             editor.setCalendarPopup(True)
             editor.setDisplayFormat("yyyy-MM-dd")
             editor.setMinimumHeight(config.MIN_TOUCH_TARGET - 8)
             editor.setEnabled(False)
             editor.dateChanged.connect(self.reload)
-            layout.addWidget(editor)
+            layout.addWidget(editor, 1, column)
 
         export_csv = QPushButton("تصدير CSV")
         export_csv.setObjectName("GhostAction")
         export_csv.setMinimumHeight(config.MIN_TOUCH_TARGET - 8)
         export_csv.clicked.connect(self._export_csv)
-        layout.addWidget(export_csv)
+        layout.addWidget(export_csv, 2, 0)
 
         export_html = QPushButton("تصدير تقرير (HTML/PDF)")
         export_html.setObjectName("PrimaryAction")
         export_html.setMinimumHeight(config.MIN_TOUCH_TARGET - 8)
         export_html.setToolTip("يفتح في المتصفح ويمكن طباعته أو حفظه PDF")
         export_html.clicked.connect(self._export_html)
-        layout.addWidget(export_html)
+        layout.addWidget(export_html, 2, 1, 1, 2)
         return bar
 
     def _build_cards(self) -> QWidget:
-        box = QFrame()
+        box = QWidget()
         layout = QGridLayout(box)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
@@ -162,9 +166,50 @@ class ReportsView(QWidget):
             "card": StatCard("بطاقة"),
             "margin": StatCard("الربح الإجمالي", accent=True),
         }
-        for index, card in enumerate(self.cards.values()):
-            layout.addWidget(card, index // 3, index % 3)
+        self._cards_box = box
+        self._cards_layout = layout
+        # The column count follows the available width, so the six cards reflow
+        # from 3x2 on a normal screen to 2x3 (or 1x6) when the window is narrow.
+        # A fixed 3-column grid made the reports page demand 950px, which a
+        # 1366x768 laptop at 125% scaling cannot give it.
+        self._cards_columns = 0
+        self._reflow_cards(3)
         return box
+
+    def _reflow_cards(self, columns: int) -> None:
+        """Lay the stat cards out in `columns` columns."""
+        if columns == self._cards_columns:
+            return
+        self._cards_columns = columns
+        layout = self._cards_layout
+        # takeAt() only detaches the layout item; the card keeps living so it can
+        # be re-added in the new shape. deleteLater() here would destroy it.
+        while layout.count():
+            layout.takeAt(0)
+        for index, card in enumerate(self.cards.values()):
+            layout.addWidget(card, index // columns, index % columns)
+        for column in range(3):
+            layout.setColumnStretch(column, 1 if column < columns else 0)
+
+    def resizeEvent(self, a0) -> None:  # noqa: N802 - Qt naming
+        """Reflow the stat cards as the window width changes."""
+        super().resizeEvent(a0)
+        if not hasattr(self, "_cards_layout"):
+            return
+        width = self.width()
+        # ~200px per card plus spacing is the readable minimum.
+        if width >= 780:
+            columns = 3
+        elif width >= 520:
+            columns = 2
+        else:
+            columns = 1
+        self._reflow_cards(columns)
+
+        # The two middle tables sit side by side only when there is room for
+        # both; below that they stack so neither is squeezed to a few pixels.
+        if hasattr(self, "_middle_box"):
+            self._set_middle_orientation(horizontal=width >= 620)
 
     def _build_daily_chart(self) -> QWidget:
         card = QFrame()
@@ -184,15 +229,18 @@ class ReportsView(QWidget):
         return card
 
     def _build_middle_row(self) -> QWidget:
+        # The two tables stack vertically when the window is narrow: side by
+        # side they need ~700px between them, which the reports page does not
+        # have at the window minimum. A QSplitter would drag, not reflow, so the
+        # direction is chosen in resizeEvent instead.
         box = QWidget()
-        layout = QHBoxLayout(box)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(12)
+        self._middle_box = box
+        self._middle_horizontal = None
+        self._middle_layout = None
 
-        # top items
-        top_card = QFrame()
-        top_card.setObjectName("Card")
-        top_layout = QVBoxLayout(top_card)
+        self.top_card = QFrame()
+        self.top_card.setObjectName("Card")
+        top_layout = QVBoxLayout(self.top_card)
         top_layout.setContentsMargins(14, 12, 14, 12)
         top_layout.setSpacing(8)
         top_title = QLabel("الأصناف الأكثر مبيعاً")
@@ -201,12 +249,10 @@ class ReportsView(QWidget):
 
         self.top_table = self._make_table(["الصنف", "الكمية", "الإيراد"])
         top_layout.addWidget(self.top_table)
-        layout.addWidget(top_card, 3)
 
-        # payment split
-        pay_card = QFrame()
-        pay_card.setObjectName("Card")
-        pay_layout = QVBoxLayout(pay_card)
+        self.pay_card = QFrame()
+        self.pay_card.setObjectName("Card")
+        pay_layout = QVBoxLayout(self.pay_card)
         pay_layout.setContentsMargins(14, 12, 14, 12)
         pay_layout.setSpacing(8)
         pay_title = QLabel("طرق الدفع")
@@ -217,8 +263,35 @@ class ReportsView(QWidget):
                                       value_formatter=lambda v: config.format_money(int(v)))
         self.payment_chart.setMinimumHeight(150)
         pay_layout.addWidget(self.payment_chart)
-        layout.addWidget(pay_card, 2)
+
+        self._set_middle_orientation(horizontal=True)
         return box
+
+    def _set_middle_orientation(self, *, horizontal: bool) -> None:
+        """Rebuild the middle row as a row or a column."""
+        if self._middle_horizontal is horizontal:
+            return
+        self._middle_horizontal = horizontal
+
+        if self._middle_layout is not None:
+            while self._middle_layout.count():
+                self._middle_layout.takeAt(0)
+            # Detach the old layout from the box before installing the new one.
+            old = self._middle_box.layout()
+            if old is not None:
+                QWidget().setLayout(old)
+
+        layout = QHBoxLayout() if horizontal else QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+        if horizontal:
+            layout.addWidget(self.top_card, 3)
+            layout.addWidget(self.pay_card, 2)
+        else:
+            layout.addWidget(self.top_card, 3)
+            layout.addWidget(self.pay_card, 2)
+        self._middle_box.setLayout(layout)
+        self._middle_layout = layout
 
     def _build_peak_chart(self) -> QWidget:
         card = QFrame()

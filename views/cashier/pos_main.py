@@ -37,7 +37,7 @@ from models.order import CartLine
 from models.product import Product
 from views.cashier.cash_dialog import PaymentDialog
 from views.cashier.modifier_dialog import ModifierDialog
-from views.widgets import Divider, FlowLayout, QuantityStepper, Toast
+from views.widgets import Divider, FlowLayout, QuantityStepper, ResponsivePanel, Toast, make_scroll
 
 logger = logging.getLogger(__name__)
 
@@ -196,9 +196,12 @@ class PosMainView(QWidget):
         root.addWidget(cart)
 
     def _build_category_rail(self) -> QWidget:
-        panel = QFrame()
+        panel = ResponsivePanel(
+            preferred_width=config.CATEGORY_RAIL_WIDTH,
+            min_width=config.CATEGORY_RAIL_MIN_WIDTH,
+            width_share=config.CATEGORY_RAIL_WINDOW_SHARE,
+        )
         panel.setObjectName("Card")
-        panel.setFixedWidth(config.CATEGORY_RAIL_WIDTH)
 
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(12, 12, 12, 12)
@@ -258,11 +261,30 @@ class PosMainView(QWidget):
         return panel
 
     def _build_cart_panel(self) -> QWidget:
-        panel = QFrame()
+        panel = ResponsivePanel(
+            preferred_width=config.CART_PANEL_WIDTH,
+            min_width=config.CART_PANEL_MIN_WIDTH,
+            width_share=config.CART_PANEL_WINDOW_SHARE,
+        )
         panel.setObjectName("Card")
-        panel.setFixedWidth(config.CART_PANEL_WIDTH)
 
-        layout = QVBoxLayout(panel)
+        # The whole panel scrolls as one column. Previously only the cart lines
+        # scrolled while the header, totals and buttons were pinned, which gave
+        # the panel a 672px minimum height — more than a 1366x768 laptop at 125%
+        # scaling can offer. The panel was then compressed and the pinned rows
+        # painted over each other. Scrolling the lot removes the floor.
+        outer = QVBoxLayout(panel)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        body = QWidget()
+        self.cart_container = body
+        layout = QVBoxLayout(body)
         layout.setContentsMargins(14, 12, 14, 12)
         layout.setSpacing(10)
 
@@ -296,20 +318,19 @@ class PosMainView(QWidget):
         layout.addLayout(shift_row)
         layout.addWidget(Divider())
 
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        self.cart_container = QWidget()
-        self.cart_layout = QVBoxLayout(self.cart_container)
-        self.cart_layout.setContentsMargins(0, 0, 6, 0)
-        self.cart_layout.setSpacing(8)
-        self.cart_layout.addStretch(1)
-        scroll.setWidget(self.cart_container)
-        layout.addWidget(scroll, 1)
-
         self.empty_hint = QLabel("السلة فارغة\nاختر صنفاً من القائمة")
         self.empty_hint.setObjectName("HintText")
         self.empty_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.empty_hint)
+
+        # Cart lines keep their own container so refresh_cart can clear exactly
+        # the lines without touching the totals and buttons around them.
+        self.cart_lines = QWidget()
+        self.cart_layout = QVBoxLayout(self.cart_lines)
+        self.cart_layout.setContentsMargins(0, 0, 0, 0)
+        self.cart_layout.setSpacing(8)
+        self.cart_layout.addStretch(1)
+        layout.addWidget(self.cart_lines)
 
         layout.addWidget(Divider())
 
@@ -363,6 +384,10 @@ class PosMainView(QWidget):
         actions.addWidget(clear, 1)
         actions.addWidget(reprint, 1)
         layout.addLayout(actions)
+
+        layout.addStretch(1)
+        scroll = make_scroll(body)
+        outer.addWidget(scroll)
         return panel
 
     @staticmethod

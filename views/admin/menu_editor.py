@@ -19,6 +19,7 @@ from PyQt6.QtWidgets import (
     QDoubleSpinBox,
     QFormLayout,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -36,7 +37,7 @@ from PyQt6.QtWidgets import (
 
 import config
 from controllers.admin_controller import AdminController, MenuError
-from views.widgets import Divider, Toast
+from views.widgets import Divider, ResponsivePanel, Toast, make_scroll
 
 logger = logging.getLogger(__name__)
 
@@ -296,9 +297,12 @@ class MenuEditorView(QWidget):
         root.addWidget(self._build_editor_panel())
 
     def _build_category_rail(self) -> QWidget:
-        panel = QFrame()
+        panel = ResponsivePanel(
+            preferred_width=config.MENU_RAIL_WIDTH,
+            min_width=config.MENU_RAIL_MIN_WIDTH,
+            width_share=0.17,
+        )
         panel.setObjectName("Card")
-        panel.setFixedWidth(230)
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(8)
@@ -343,6 +347,10 @@ class MenuEditorView(QWidget):
     def _build_products_panel(self) -> QWidget:
         panel = QFrame()
         panel.setObjectName("Card")
+        # The middle pane is the only one with a stretch factor, so it is the one
+        # that collapses first when the window is narrow. A floor keeps the
+        # product table readable instead of squeezing it to a few pixels.
+        panel.setMinimumWidth(config.MENU_PRODUCTS_MIN_WIDTH)
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(14, 12, 14, 12)
         layout.setSpacing(10)
@@ -398,10 +406,28 @@ class MenuEditorView(QWidget):
         return panel
 
     def _build_editor_panel(self) -> QWidget:
-        panel = QFrame()
+        panel = ResponsivePanel(
+            preferred_width=config.MENU_EDITOR_WIDTH,
+            min_width=config.MENU_EDITOR_MIN_WIDTH,
+            width_share=0.25,
+        )
         panel.setObjectName("Card")
-        panel.setFixedWidth(330)
-        layout = QVBoxLayout(panel)
+
+        # The editor is tall (two option lists plus a group list). It scrolls so
+        # its height is content, not a floor the whole window must clear — the
+        # previous fixed minimums (190 + 150 + 150 px) pushed the view's own
+        # minimum to 963px, which no 1366x768 laptop can satisfy.
+        outer = QVBoxLayout(panel)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        body = QWidget()
+        layout = QVBoxLayout(body)
         layout.setContentsMargins(14, 12, 14, 12)
         layout.setSpacing(10)
 
@@ -422,7 +448,14 @@ class MenuEditorView(QWidget):
         layout.addWidget(groups_label)
 
         self.groups_list = QListWidget()
-        self.groups_list.setMinimumHeight(190)
+        self.groups_list.setMinimumHeight(140)
+        # The lists must not dictate the panel's width. A QListWidget reports a
+        # minimum width from its longest item, which on a narrow window made the
+        # list wider than the panel and painted it outside. Vertical scrolling
+        # keeps every item reachable, so the width floor is not needed.
+        self.groups_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.groups_list.setTextElideMode(Qt.TextElideMode.ElideRight)
+        self.groups_list.setMinimumWidth(0)
         layout.addWidget(self.groups_list)
 
         save_groups = QPushButton("حفظ مجموعات الخيارات")
@@ -437,15 +470,23 @@ class MenuEditorView(QWidget):
         layout.addWidget(mods_label)
 
         self.modifier_groups_list = QListWidget()
-        self.modifier_groups_list.setMinimumHeight(150)
+        self.modifier_groups_list.setMinimumHeight(120)
+        self.modifier_groups_list.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self.modifier_groups_list.setTextElideMode(Qt.TextElideMode.ElideRight)
         self.modifier_groups_list.itemSelectionChanged.connect(self._load_modifier_options)
         layout.addWidget(self.modifier_groups_list)
 
         self.modifier_options_list = QListWidget()
-        self.modifier_options_list.setMinimumHeight(150)
+        self.modifier_options_list.setMinimumHeight(120)
+        self.modifier_options_list.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self.modifier_options_list.setTextElideMode(Qt.TextElideMode.ElideRight)
         layout.addWidget(self.modifier_options_list)
 
-        mod_actions = QHBoxLayout()
+        mod_actions = QGridLayout()
         add_mod = QPushButton("+ خيار")
         add_mod.setObjectName("GhostAction")
         add_mod.setMinimumHeight(52)
@@ -458,12 +499,19 @@ class MenuEditorView(QWidget):
         del_mod.setObjectName("DangerAction")
         del_mod.setMinimumHeight(52)
         del_mod.clicked.connect(self._delete_modifier)
-        mod_actions.addWidget(add_mod)
-        mod_actions.addWidget(edit_mod)
-        mod_actions.addWidget(del_mod)
+        # Three buttons in one row needed 245px, which set a 273px floor on the
+        # whole editor pane. Wrapping them two-per-row lets the pane follow the
+        # window instead of dictating it.
+        mod_actions.addWidget(add_mod, 0, 0, 1, 2)
+        mod_actions.addWidget(edit_mod, 1, 0)
+        mod_actions.addWidget(del_mod, 1, 1)
+        mod_actions.setColumnStretch(0, 1)
+        mod_actions.setColumnStretch(1, 1)
         layout.addLayout(mod_actions)
 
         layout.addStretch(1)
+        scroll = make_scroll(body)
+        outer.addWidget(scroll)
         return panel
 
     # -- data -------------------------------------------------------------- #
